@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Nominatim 缓存服务 - Dashboard</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+  <div class="container">
+    <header class="header">
+      <h1>Nominatim 缓存服务</h1>
+      <div class="stats-badge" id="cacheCount">缓存: 加载中...</div>
+    </header>
+
+    <section class="card">
+      <h2>访问统计</h2>
+      <div class="stats-grid">
+        <div class="stat-item">
+          <div class="stat-value" id="totalRequests">-</div>
+          <div class="stat-label">总请求数</div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-value" id="cacheHits">-</div>
+          <div class="stat-label">缓存命中</div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-value" id="cacheMisses">-</div>
+          <div class="stat-label">缓存未命中</div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-value highlight" id="hitRate">-</div>
+          <div class="stat-label">命中率</div>
+        </div>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>7 天趋势</h2>
+      <div class="chart-container">
+        <canvas id="trendChart"></canvas>
+      </div>
+    </section>
+
+    <section class="actions">
+      <a href="/list.html" class="btn btn-primary">查看缓存清单</a>
+      <button class="btn btn-danger" id="clearCacheBtn">清空缓存</button>
+      <button class="btn btn-secondary" id="refreshBtn">刷新</button>
+    </section>
+
+    <footer class="footer">
+      <p>Powered by Nominatim Cache Service</p>
+    </footer>
+  </div>
+
+  <script src="/js/api.js"></script>
+  <script src="/js/dashboard.js"></script>
+</body>
+</html>

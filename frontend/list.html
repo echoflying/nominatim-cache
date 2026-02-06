@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Nominatim 缓存服务 - 缓存清单</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+  <div class="container">
+    <header class="header">
+      <a href="/" class="back-link">← 返回 Dashboard</a>
+      <h1>缓存清单</h1>
+    </header>
+
+    <section class="card">
+      <div class="toolbar">
+        <input type="text" id="searchInput" placeholder="搜索地名..." class="search-input">
+        <button class="btn btn-primary" id="searchBtn">搜索</button>
+        <button class="btn btn-secondary" id="refreshBtn">刷新</button>
+      </div>
+
+      <div class="table-container">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>坐标</th>
+              <th>地名</th>
+              <th>类型</th>
+              <th>来源</th>
+              <th>首次缓存</th>
+              <th>访问次</th>
+              <th>操作</th>
+            </tr>
+          </thead>
+          <tbody id="cacheTableBody">
+            <tr>
+              <td colspan="7" class="loading">加载中...</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="pagination">
+        <button class="btn btn-sm" id="prevBtn" disabled>上一页</button>
+        <span id="pageInfo">第 1 页 / 共 0 页</span>
+        <button class="btn btn-sm" id="nextBtn" disabled>下一页</button>
+      </div>
+    </section>
+
+    <footer class="footer">
+      <p>Powered by Nominatim Cache Service</p>
+    </footer>
+  </div>
+
+  <!-- 查询上游模态框 -->
+  <div id="queryModal" class="modal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2>查询上游</h2>
+        <button class="modal-close" id="closeQueryModal">&times;</button>
+      </div>
+      <div class="modal-body">
+        <p id="queryCoords" class="coords-label"></p>
+        <div id="queryResults" class="results-list"></div>
+        <div class="form-group">
+          <label>地名:</label>
+          <textarea id="selectedDisplayName" rows="3" class="full-width"></textarea>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-primary" id="addToCacheBtn">添加到缓存</button>
+        <button class="btn btn-secondary" id="cancelQueryBtn">取消</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="/js/api.js"></script>
+  <script src="/js/cache-list.js"></script>
+</body>
+</html>

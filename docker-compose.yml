@@ -1,0 +1,33 @@
+version: '3.8'
+
+services:
+  app:
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+    container_name: nominatim-cache
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+      - DATABASE_PATH=/app/data/cache.db
+      - ADMIN_USERNAME=${ADMIN_USERNAME:-admin}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD:-admin123}
+      - NOMINATIM_PRIMARY=${NOMINATIM_PRIMARY:-https://api.mirror-earth.com/nominatim/reverse}
+      - NOMINATIM_BACKUP_1=${NOMINATIM_BACKUP_1:-https://photon.komoot.io/reverse}
+      - NOMINATIM_BACKUP_2=${NOMINATIM_BACKUP_2:-https://nominatim.openstreetmap.org/reverse}
+      - LOG_RETENTION_DAYS=30
+    volumes:
+      - ./server/data:/app/data
+      - ./frontend:/app/frontend
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/api/reverse?lat=30&lon=120"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+networks:
+  default:
+    name: nominatim-cache-network
