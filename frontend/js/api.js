@@ -5,6 +5,8 @@
 class NominatimAPI {
   constructor(baseUrl = '') {
     this.baseUrl = baseUrl;
+    this.authStorageKey = 'nominatim_auth';
+    this.authPromptMessage = '请输入管理后台账号和密码';
   }
 
   /**
@@ -30,9 +32,7 @@ class NominatimAPI {
    * 获取统计信息
    */
   async getStats() {
-    const response = await fetch(`${this.baseUrl}/admin/stats`, {
-      headers: this.getAuthHeaders()
-    });
+    const response = await this.authenticatedFetch(`${this.baseUrl}/admin/stats`);
     const result = await response.json();
     if (!result.success) {
       throw new Error(result.error || 'Failed to get stats');
@@ -44,9 +44,7 @@ class NominatimAPI {
    * 获取每日统计
    */
   async getDailyStats() {
-    const response = await fetch(`${this.baseUrl}/admin/stats/daily`, {
-      headers: this.getAuthHeaders()
-    });
+    const response = await this.authenticatedFetch(`${this.baseUrl}/admin/stats/daily`);
     const result = await response.json();
     if (!result.success) {
       throw new Error(result.error || 'Failed to get daily stats');
@@ -63,9 +61,7 @@ class NominatimAPI {
     if (params.limit) searchParams.set('limit', params.limit.toString());
     if (params.search) searchParams.set('search', params.search);
 
-    const response = await fetch(`${this.baseUrl}/admin/cache/list?${searchParams}`, {
-      headers: this.getAuthHeaders()
-    });
+    const response = await this.authenticatedFetch(`${this.baseUrl}/admin/cache/list?${searchParams}`);
     const result = await response.json();
     if (!result.success) {
       throw new Error(result.error || 'Failed to get cache list');
@@ -77,9 +73,7 @@ class NominatimAPI {
    * 获取单个缓存详情
    */
   async getCacheDetail(key) {
-    const response = await fetch(`${this.baseUrl}/admin/cache/${encodeURIComponent(key)}`, {
-      headers: this.getAuthHeaders()
-    });
+    const response = await this.authenticatedFetch(`${this.baseUrl}/admin/cache/${encodeURIComponent(key)}`);
     const result = await response.json();
     if (!result.success) {
       throw new Error(result.error || 'Cache not found');
@@ -91,9 +85,8 @@ class NominatimAPI {
    * 删除缓存
    */
   async deleteCache(key) {
-    const response = await fetch(`${this.baseUrl}/admin/cache/${encodeURIComponent(key)}`, {
+    const response = await this.authenticatedFetch(`${this.baseUrl}/admin/cache/${encodeURIComponent(key)}`, {
       method: 'DELETE',
-      headers: this.getAuthHeaders()
     });
     const result = await response.json();
     if (!result.success) {
@@ -106,9 +99,8 @@ class NominatimAPI {
    * 清空所有缓存
    */
   async clearAllCache() {
-    const response = await fetch(`${this.baseUrl}/admin/cache/clear`, {
+    const response = await this.authenticatedFetch(`${this.baseUrl}/admin/cache/clear`, {
       method: 'POST',
-      headers: this.getAuthHeaders()
     });
     const result = await response.json();
     if (!result.success) {
@@ -121,10 +113,9 @@ class NominatimAPI {
    * 查询上游 (返回多个源的结果)
    */
   async queryUpstream(lat, lon) {
-    const response = await fetch(`${this.baseUrl}/admin/query`, {
+    const response = await this.authenticatedFetch(`${this.baseUrl}/admin/query`, {
       method: 'POST',
       headers: {
-        ...this.getAuthHeaders(),
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({ lat, lon })
@@ -140,10 +131,9 @@ class NominatimAPI {
    * 手动添加/更新缓存
    */
   async addManualCache(data) {
-    const response = await fetch(`${this.baseUrl}/admin/cache/add`, {
+    const response = await this.authenticatedFetch(`${this.baseUrl}/admin/cache/add`, {
       method: 'POST',
       headers: {
-        ...this.getAuthHeaders(),
         'Content-Type': 'application/json'
       },
       body: JSON.stringify(data)
@@ -158,20 +148,56 @@ class NominatimAPI {
   /**
    * 获取认证头
    */
-  getAuthHeaders() {
-    // 从浏览器存储获取认证信息，或使用默认
-    const credentials = localStorage.getItem('nominatim_auth');
-    if (credentials) {
-      return {
-        'Authorization': `Basic ${credentials}`
-      };
+  async authenticatedFetch(url, options = {}, allowRetry = true) {
+    const response = await fetch(url, {
+      ...options,
+      headers: {
+        ...this.getAuthHeaders(),
+        ...(options.headers || {})
+      }
+    });
+
+    if (response.status === 401 && allowRetry) {
+      this.clearStoredAuth();
+      const updated = this.ensureCredentials(true);
+      if (updated) {
+        return this.authenticatedFetch(url, options, false);
+      }
     }
-    // 默认 admin:admin123
-    const defaultAuth = btoa('admin:admin123');
-    localStorage.setItem('nominatim_auth', defaultAuth);
-    return {
-      'Authorization': `Basic ${defaultAuth}`
-    };
+
+    return response;
+  }
+
+  getAuthHeaders() {
+    const credentials = this.ensureCredentials();
+    return credentials
+      ? { 'Authorization': `Basic ${credentials}` }
+      : {};
+  }
+
+  ensureCredentials(forcePrompt = false) {
+    let credentials = forcePrompt ? null : localStorage.getItem(this.authStorageKey);
+    if (credentials) {
+      return credentials;
+    }
+
+    const username = window.prompt(`${this.authPromptMessage}\n账号:`);
+    if (!username) {
+      return null;
+    }
+
+    const password = window.prompt('密码:');
+    if (!password) {
+      return null;
+    }
+
+    credentials = btoa(`${username}:${password}`);
+    localStorage.setItem(this.authStorageKey, credentials);
+    return credentials;
+  }
+
+  clearStoredAuth() {
+    localStorage.removeItem(this.authStorageKey);
   }
 }
 

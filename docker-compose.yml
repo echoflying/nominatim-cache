@@ -1,10 +1,8 @@
-version: '3.8'
-
 services:
   app:
     build:
-      context: ./server
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: server/Dockerfile
     container_name: nominatim-cache
     ports:
       - "3000:3000"
@@ -23,7 +21,7 @@ services:
       - ./frontend:/app/frontend
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:3000/api/reverse?lat=30&lon=120"]
+      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
       interval: 30s
       timeout: 10s
       retries: 3

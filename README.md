@@ -7,6 +7,7 @@
 - 基本需求和设计：DESIGN.md
 - 外部接口和管理接口：API.md
 - 外部如何调用API的说明：API_nominatim-cache.md
+- 生产部署说明：docs/DEPLOYMENT.md
 
 
 ## 功能特性
@@ -50,13 +51,13 @@ npm run dev
 
 ```bash
 # 构建并启动
-docker-compose up -d
+docker compose up -d --build
 
 # 查看日志
-docker-compose logs -f
+docker compose logs -f app
 
 # 停止服务
-docker-compose down
+docker compose down
 ```
 
 ## 使用方法
@@ -101,9 +102,9 @@ curl -u admin:admin123 -X POST http://localhost:3000/admin/cache/clear
 
 ### 认证
 
-默认账号: `admin` / `admin123`
+开发环境可以临时使用默认账号: `admin` / `admin123`
 
-建议在生产环境修改默认密码：
+生产环境必须修改默认密码：
 
 ```bash
 # 使用环境变量
@@ -167,8 +168,9 @@ sudo npm install -g pm2
 
 # 启动服务
 cd server
-npm install --production
+npm ci
 npm run build
+npm run db:init
 pm2 start ecosystem.config.js
 
 # 配置开机自启
@@ -199,6 +201,14 @@ server {
 sudo apt install certbot python3-certbot-nginx
 sudo certbot --nginx -d your-domain.com
 ```
+
+### 5. 健康检查
+
+```bash
+curl http://127.0.0.1:3000/health
+```
+
+更多部署细节见 `docs/DEPLOYMENT.md`。
 
 ## 备份与恢复
 

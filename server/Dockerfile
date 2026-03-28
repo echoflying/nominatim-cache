@@ -1,22 +1,29 @@
-# 基础镜像
-FROM node:20-alpine
+FROM node:20-alpine AS builder
 
-# 工作目录
-WORKDIR /app
+WORKDIR /app/server
 
-# 安装依赖并构建
-COPY package*.json ./
-RUN npm ci --only=production
+COPY server/package*.json ./
+RUN npm ci
 
-# 复制源代码并构建
-COPY . .
+COPY server/ ./
 RUN npm run build
 
-# 安装 curl 用于健康检查
+FROM node:20-alpine AS runtime
+
+WORKDIR /app
+
 RUN apk add --no-cache curl
 
-# 暴露端口
+COPY server/package*.json ./server/
+WORKDIR /app/server
+RUN npm ci --omit=dev
+
+COPY --from=builder /app/server/dist ./dist
+COPY --from=builder /app/server/ecosystem.config.js ./ecosystem.config.js
+COPY --from=builder /app/server/src/scripts ./src/scripts
+COPY --from=builder /app/server/logs ./logs
+COPY frontend /app/frontend
+
 EXPOSE 3000
 
-# 启动命令
 CMD ["node", "dist/index.js"]

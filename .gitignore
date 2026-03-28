@@ -44,3 +44,5 @@ coverage/
 # Backend specific
 server/data/
 !server/data/.gitkeep
+server/logs/*.log
+!server/logs/.gitkeep

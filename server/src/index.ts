@@ -45,6 +45,16 @@ async function main() {
   const frontendPath = path.resolve(__dirname, '../../frontend');
   app.use(express.static(frontendPath));
 
+  app.get('/health', (req, res) => {
+    res.json({
+      status: 'ok',
+      service: 'nominatim-cache',
+      environment: config.NODE_ENV,
+      timestamp: Date.now(),
+      uptime: Math.round(process.uptime())
+    });
+  });
+
   // 6. API 路由 (无需认证)
   app.use('/api/reverse', nominatimRouter);
 
@@ -79,4 +89,7 @@ async function main() {
   });
 }
 
-main().catch(console.error);
+main().catch((error) => {
+  console.error('[Server] 启动失败:', error);
+  process.exit(1);
+});

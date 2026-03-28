@@ -8,11 +8,13 @@ module.exports = {
     env: {
       NODE_ENV: 'production',
       PORT: 3000,
-      DATABASE_PATH: './data/cache.db'
+      DATABASE_PATH: './data/cache.db',
+      ADMIN_USERNAME: 'change-me',
+      ADMIN_PASSWORD: 'change-me-too'
     },
-    log_file: '/var/log/nominatim-cache/app.log',
-    out_file: '/var/log/nominatim-cache/out.log',
-    error_file: '/var/log/nominatim-cache/error.log',
+    log_file: './logs/app.log',
+    out_file: './logs/out.log',
+    error_file: './logs/error.log',
     log_date_format: 'YYYY-MM-DD HH:mm:ss',
     max_memory_restart: '200M'
   }]

@@ -1,0 +1,11 @@
+node_modules/
+server/node_modules/
+server/dist/
+frontend/node_modules/
+.git/
+.env
+.env.local
+server/data/
+server/logs/*.log
+npm-debug.log*
+yarn-debug.log*

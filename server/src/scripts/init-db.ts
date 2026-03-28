@@ -2,17 +2,13 @@
  * 数据库初始化脚本
  */
 
-import path from 'path';
-import { fileURLToPath } from 'url';
 import { initDatabase, closeDatabase } from '../services/database.js';
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+import { loadConfig } from '../utils/config.js';
 
 async function main() {
   console.log('[Init] 开始初始化数据库...');
-
-  const dbPath = path.resolve(__dirname, '../../data/cache.db');
+  const config = loadConfig();
+  const dbPath = config.DATABASE_PATH;
 
   try {
     const db = initDatabase(dbPath);
