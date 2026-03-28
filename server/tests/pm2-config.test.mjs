@@ -19,6 +19,15 @@ test('mac mini deploy script exists in repository', () => {
   assert.equal(fs.existsSync(scriptPath), true);
 });
 
+test('mac mini deploy script sets explicit PATH for non-interactive shells', () => {
+  const scriptPath = path.resolve(process.cwd(), '../scripts/deploy-macmini.sh');
+  const script = fs.readFileSync(scriptPath, 'utf8');
+
+  assert.match(script, /export PATH=.*\.npm-global\/bin/);
+  assert.match(script, /export PATH=.*\/opt\/local\/bin/);
+  assert.match(script, /export PATH=.*\/usr\/local\/bin/);
+});
+
 test('launchd path sanitizer removes duplicates while preserving required bins', async () => {
   const mod = await import('../dist/utils/config.js');
   const sanitized = mod.sanitizePathEntries([
