@@ -2,6 +2,8 @@
 
 本文档描述 `nominatim-cache` 当前支持的两种部署方式：`Docker Compose` 和 `PM2 + Nginx`。
 
+如果部署目标是一台通过 Tailscale 访问的 Mac mini，请直接参考 `docs/deploy/macmini-tailscale.md`。
+
 ## 部署前要求
 
 - Linux 服务器
