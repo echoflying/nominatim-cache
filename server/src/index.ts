@@ -35,7 +35,15 @@ async function main() {
   const app = express();
 
   // 4. 中间件
-  app.use(helmet());
+  app.use(helmet({
+    contentSecurityPolicy: {
+      directives: {
+        'upgrade-insecure-requests': null
+      }
+    },
+    crossOriginOpenerPolicy: false,
+    originAgentCluster: false
+  }));
   app.use(cors());
   app.use(compression());
   app.use(express.json());
