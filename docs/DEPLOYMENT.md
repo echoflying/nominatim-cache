@@ -97,7 +97,7 @@ npm run db:init
 ```bash
 cp .env /opt/nominatim-cache/.env
 export NOMINATIM_CACHE_SERVER_CWD=/opt/nominatim-cache/server
-pm2 start ecosystem.config.js
+pm2 start ecosystem.config.cjs
 pm2 save
 ```
 

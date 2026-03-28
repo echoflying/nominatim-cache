@@ -171,7 +171,7 @@ cd server
 npm ci
 npm run build
 npm run db:init
-pm2 start ecosystem.config.js
+pm2 start ecosystem.config.cjs
 
 # 配置开机自启
 pm2 startup
