@@ -69,17 +69,40 @@ NOMINATIM_CACHE_SERVER_CWD=~/nominatim-cache/server ~/.npm-global/bin/pm2 start 
 
 ```bash
 cd ~/nominatim-cache
-git pull
-cd server
-npm install
-npm run build
-~/.npm-global/bin/pm2 restart nominatim-cache
+./scripts/deploy-macmini.sh
 ```
 
 说明：
 
 - 统一使用仓库根目录 `.env` 作为配置入口
-- PM2 通过 `ecosystem.config.js` 启动，但真正的端口、数据库、管理员配置都从根目录 `.env` 读取
+- PM2 通过 `ecosystem.config.cjs` 启动，但真正的端口、数据库、管理员配置都从根目录 `.env` 读取
+
+## 升级 SOP
+
+每次升级都按下面顺序执行：
+
+1. 在本地代码库修改并测试
+2. 提交并 push 到 GitHub
+3. 在 Mac mini 上运行：
+
+```bash
+cd ~/nominatim-cache
+./scripts/deploy-macmini.sh
+```
+
+4. 验证：
+
+```bash
+curl http://127.0.0.1:3000/health
+curl http://100.93.208.107:3000/health
+~/.npm-global/bin/pm2 status
+```
+
+5. 如需检查日志：
+
+```bash
+~/.npm-global/bin/pm2 logs nominatim-cache
+```
 
 ## 验证命令
 

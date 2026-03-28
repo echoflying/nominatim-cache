@@ -32,6 +32,23 @@ export function getEnvFileCandidates(baseDir: string = __dirname): string[] {
   ];
 }
 
+export function sanitizePathEntries(entries: string[]): string[] {
+  const result: string[] = [];
+  const seen = new Set<string>();
+
+  for (const entry of entries) {
+    const trimmed = entry.trim();
+    if (!trimmed || seen.has(trimmed)) {
+      continue;
+    }
+
+    seen.add(trimmed);
+    result.push(trimmed);
+  }
+
+  return result;
+}
+
 function loadEnvFiles(): void {
   if (loadedEnv) {
     return;
