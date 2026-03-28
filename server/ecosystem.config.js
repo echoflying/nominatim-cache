@@ -2,15 +2,11 @@ module.exports = {
   apps: [{
     name: 'nominatim-cache',
     script: 'dist/index.js',
-    cwd: '/opt/nominatim-cache/server',
+    cwd: process.env.NOMINATIM_CACHE_SERVER_CWD || '/opt/nominatim-cache/server',
     instances: 1,
     exec_mode: 'fork',
     env: {
-      NODE_ENV: 'production',
-      PORT: 3000,
-      DATABASE_PATH: './data/cache.db',
-      ADMIN_USERNAME: 'change-me',
-      ADMIN_PASSWORD: 'change-me-too'
+      NODE_ENV: 'production'
     },
     log_file: './logs/app.log',
     out_file: './logs/out.log',

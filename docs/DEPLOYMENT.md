@@ -15,10 +15,10 @@
 
 服务会按以下顺序查找 dotenv 文件：
 
-1. `server/.env`
-2. 仓库根目录 `.env`
+1. 仓库根目录 `.env`
+2. `server/.env`
 
-系统环境变量优先级最高，会覆盖 dotenv 文件中的同名值。
+推荐统一使用仓库根目录 `.env` 作为部署入口。系统环境变量优先级最高，会覆盖 dotenv 文件中的同名值。
 
 生产环境必须显式设置以下变量，且不得使用默认值：
 
@@ -95,9 +95,17 @@ npm run db:init
 ### 3. 启动 PM2
 
 ```bash
+cp .env /opt/nominatim-cache/.env
+export NOMINATIM_CACHE_SERVER_CWD=/opt/nominatim-cache/server
 pm2 start ecosystem.config.js
 pm2 save
 ```
+
+说明：
+
+- `ecosystem.config.js` 只固定 `NODE_ENV=production`
+- 端口、数据库路径、管理员账号密码等都建议放在仓库根目录 `.env`
+- 这样 Docker、手工部署、PM2 三种方式共用一套配置入口
 
 日志会写入 `server/logs/`。
 

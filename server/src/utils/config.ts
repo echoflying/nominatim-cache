@@ -27,8 +27,8 @@ export interface Config {
 
 export function getEnvFileCandidates(baseDir: string = __dirname): string[] {
   return [
-    path.resolve(baseDir, '../../.env'),
-    path.resolve(baseDir, '../../../.env')
+    path.resolve(baseDir, '../../../.env'),
+    path.resolve(baseDir, '../../.env')
   ];
 }
 

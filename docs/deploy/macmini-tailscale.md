@@ -37,7 +37,7 @@ cp .env.example .env
 
 ```env
 PORT=3000
-NODE_ENV=development
+NODE_ENV=production
 DATABASE_PATH=./data/cache.db
 ADMIN_USERNAME=your-admin
 ADMIN_PASSWORD=strong-password
@@ -61,7 +61,7 @@ npm run db:init
 
 ```bash
 cd ~/nominatim-cache/server
-~/.npm-global/bin/pm2 start dist/index.js --name nominatim-cache
+NOMINATIM_CACHE_SERVER_CWD=~/nominatim-cache/server ~/.npm-global/bin/pm2 start ecosystem.config.js
 ~/.npm-global/bin/pm2 save
 ```
 
@@ -75,6 +75,11 @@ npm install
 npm run build
 ~/.npm-global/bin/pm2 restart nominatim-cache
 ```
+
+说明：
+
+- 统一使用仓库根目录 `.env` 作为配置入口
+- PM2 通过 `ecosystem.config.js` 启动，但真正的端口、数据库、管理员配置都从根目录 `.env` 读取
 
 ## 验证命令
 
