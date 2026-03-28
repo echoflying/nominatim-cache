@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Nominatim 缓存服务 - 最近请求</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+  <div class="container">
+    <header class="header">
+      <a href="/" class="back-link">← 返回 Dashboard</a>
+      <h1>最近请求</h1>
+      <div class="stats-badge" id="requestStatus">自动刷新中</div>
+    </header>
+
+    <section class="card">
+      <div class="toolbar">
+        <div class="toolbar-note">显示最近 100 条请求，页面可见时每 1 秒自动刷新</div>
+        <button class="btn btn-secondary" id="refreshBtn">立即刷新</button>
+      </div>
+
+      <div class="table-container">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>时间</th>
+              <th>坐标</th>
+              <th>命中</th>
+              <th>缓存 Key</th>
+            </tr>
+          </thead>
+          <tbody id="requestTableBody">
+            <tr>
+              <td colspan="4" class="loading">加载中...</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <footer class="footer">
+      <p>Powered by Nominatim Cache Service</p>
+    </footer>
+  </div>
+
+  <script src="/js/api.js"></script>
+  <script src="/js/request-list.js"></script>
+</body>
+</html>

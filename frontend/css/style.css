@@ -164,6 +164,11 @@ body {
   margin-bottom: 20px;
 }
 
+.toolbar-note {
+  color: #666;
+  font-size: 14px;
+}
+
 .search-input {
   flex: 1;
   max-width: 400px;

@@ -79,6 +79,10 @@ async function main() {
     res.sendFile(path.join(frontendPath, 'list.html'));
   });
 
+  app.get('/requests.html', (req, res) => {
+    res.sendFile(path.join(frontendPath, 'requests.html'));
+  });
+
   // 9. 错误处理
   app.use((err: Error, req: express.Request, res: express.Response, next: express.NextFunction) => {
     console.error('[Error]', err.stack);

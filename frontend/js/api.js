@@ -7,6 +7,7 @@ class NominatimAPI {
     this.baseUrl = baseUrl;
     this.authStorageKey = 'nominatim_auth';
     this.authPromptMessage = '请输入管理后台账号和密码';
+    this.lastCredentialSource = 'none';
   }
 
   /**
@@ -50,6 +51,23 @@ class NominatimAPI {
       throw new Error(result.error || 'Failed to get daily stats');
     }
     return result.data;
+  }
+
+  /**
+   * 获取最近访问日志
+   */
+  async getRecentLogs(params = {}) {
+    const searchParams = new URLSearchParams();
+    if (params.page) searchParams.set('page', params.page.toString());
+    if (params.limit) searchParams.set('limit', params.limit.toString());
+    if (params.cached !== undefined) searchParams.set('cached', params.cached.toString());
+
+    const response = await this.authenticatedFetch(`${this.baseUrl}/admin/logs?${searchParams}`);
+    const result = await response.json();
+    if (!result.success) {
+      throw new Error(result.error || 'Failed to get recent logs');
+    }
+    return result;
   }
 
   /**
@@ -149,15 +167,17 @@ class NominatimAPI {
    * 获取认证头
    */
   async authenticatedFetch(url, options = {}, allowRetry = true) {
+    const authHeaders = this.getAuthHeaders();
+    const credentialSource = this.lastCredentialSource;
     const response = await fetch(url, {
       ...options,
       headers: {
-        ...this.getAuthHeaders(),
+        ...authHeaders,
         ...(options.headers || {})
       }
     });
 
-    if (response.status === 401 && allowRetry) {
+    if (response.status === 401 && allowRetry && credentialSource === 'stored') {
       this.clearStoredAuth();
       const updated = this.ensureCredentials(true);
       if (updated) {
@@ -178,21 +198,25 @@ class NominatimAPI {
   ensureCredentials(forcePrompt = false) {
     let credentials = forcePrompt ? null : localStorage.getItem(this.authStorageKey);
     if (credentials) {
+      this.lastCredentialSource = 'stored';
       return credentials;
     }
 
     const username = window.prompt(`${this.authPromptMessage}\n账号:`);
     if (!username) {
+      this.lastCredentialSource = 'none';
       return null;
     }
 
     const password = window.prompt('密码:');
     if (!password) {
+      this.lastCredentialSource = 'none';
       return null;
     }
 
     credentials = btoa(`${username}:${password}`);
     localStorage.setItem(this.authStorageKey, credentials);
+    this.lastCredentialSource = 'prompt';
     return credentials;
   }
 
