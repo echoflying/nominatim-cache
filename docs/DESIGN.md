@@ -120,16 +120,23 @@ nominatim-cache/
 ├── frontend/                        # 前端页面
 │   ├── index.html                  # Dashboard 页面
 │   ├── list.html                   # 缓存清单页面
+│   ├── requests.html               # 请求日志页面
 │   ├── css/
 │   │   └── style.css              # 公共样式
 │   └── js/
 │       ├── api.js                  # API 客户端封装
 │       ├── dashboard.js            # Dashboard 逻辑
-│       └── cache-list.js           # 缓存列表逻辑
+│       ├── cache-list.js           # 缓存列表逻辑
+│       └── request-list.js         # 请求日志逻辑
 │
 ├── docs/                           # 文档
 │   ├── DESIGN.md                   # 本设计文档
-│   └── API.md                      # API 接口文档
+│   ├── API.md                      # API 接口文档
+│   ├── DEPLOYMENT.md               # 部署文档
+│   ├── nominatim_access_guide.md   # 上游源访问说明
+│   ├── nominatim_round_robin.md    # 调度算法设计
+│   └── deploy/                     # 特定场景部署
+│       └── macmini-tailscale.md
 │
 ├── docker-compose.yml              # Docker 编排配置
 │
@@ -214,131 +221,7 @@ CREATE INDEX idx_cache_key_logs ON access_logs(cache_key);
 
 ## 五、API 接口设计
 
-### 5.1 接口概览
-
-| 接口 | 方法 | 认证 | 说明 |
-|------|------|------|------|
-| `/api/reverse` | GET | ❌ | Nominatim 逆地理编码代理 |
-| `/admin/stats` | GET | ✅ | 获取统计信息 |
-| `/admin/cache/list` | GET | ✅ | 获取缓存列表（分页） |
-| `/admin/cache/:key` | GET | ✅ | 获取单个缓存详情 |
-| `/admin/cache/:key` | DELETE | ✅ | 删除单个缓存 |
-| `/admin/cache/clear` | POST | ✅ | 清空所有缓存 |
-| `/admin/logs` | GET | ✅ | 获取访问日志 |
-
-### 5.2 接口详情
-
-#### 5.2.1 Nominatim 逆地理编码代理
-
-**请求:**
-```
-GET /api/reverse?lat=30.28746&lon=120.16145&format=jsonv2&addressdetails=1
-```
-
-**参数:**
-
-| 参数 | 类型 | 必填 | 说明 |
-|------|------|------|------|
-| lat | float | ✅ | 纬度 |
-| lon | float | ✅ | 经度 |
-| format | string | ❌ | 响应格式 (默认: jsonv2) |
-| addressdetails | int | ❌ | 是否返回地址详情 (默认: 1) |
-| extratags | int | ❌ | 是否返回扩展标签 (默认: 1) |
-| accept-language | string | ❌ | 语言 (默认: zh-CN) |
-| zoom | int | ❌ | 缩放级别 (默认: 18) |
-
-**响应 (兼容 Nominatim 官方):**
-```json
-{
-  "lat": "30.2874600",
-  "lon": "120.1614500",
-  "display_name": "灵隐寺, 灵隐路, 西湖区, 杭州市, 浙江省, 中国",
-  "address": {
-    "tourism": "temple",
-    "road": "灵隐路",
-    "city": "杭州市"
-  }
-}
-```
-
-> **说明:** 接口完全兼容 Nominatim 官方格式，缓存状态对调用方透明。
-
-#### 5.2.2 获取统计信息
-
-**请求:**
-```
-GET /admin/stats
-Authorization: Basic YWRtaW46YWRtaW4xMjM=
-```
-
-**响应:**
-```json
-{
-  "total_requests": 12583,
-  "cache_hits": 11920,
-  "cache_misses": 663,
-  "hit_rate": 94.7,
-  "cache_count": 1247,
-  "last_updated_at": 1704153600
-}
-```
-
-#### 5.2.3 获取缓存列表
-
-**请求:**
-```
-GET /admin/cache/list?page=1&limit=20&search=灵隐
-Authorization: Basic YWRtaW46YWRtaW4xMjM=
-```
-
-**参数:**
-
-| 参数 | 类型 | 说明 |
-|------|------|------|
-| page | int | 页码 (默认: 1) |
-| limit | int | 每页数量 (默认: 20, 最大: 100) |
-| search | string | 搜索关键词 |
-
-**响应:**
-```json
-{
-  "data": [
-    {
-      "cache_key": "30.2875_120.1615",
-      "lat": 30.2875,
-      "lon": 120.1615,
-      "display_name": "灵隐寺, 灵隐路, 西湖区, 杭州市...",
-      "place_type": "temple",
-      "first_cached_at": 1704067200,
-      "last_accessed_at": 1704153600,
-      "access_count": 156
-    }
-  ],
-  "pagination": {
-    "page": 1,
-    "limit": 20,
-    "total": 1247,
-    "total_pages": 63
-  }
-}
-```
-
-#### 5.2.4 清空缓存
-
-**请求:**
-```
-POST /admin/cache/clear
-Authorization: Basic YWRtaW46YWRtaW4xMjM=
-```
-
-**响应:**
-```json
-{
-  "success": true,
-  "message": "所有缓存已清空",
-  "deleted_count": 1247
-}
-```
+详见 [API.md](API.md)
 
 ---
 
@@ -363,122 +246,13 @@ Authorization: Basic YWRtaW46YWRtaW4xMjM=
 
 ## 七、部署指南
 
-### 7.1 开发环境（Ubuntu 本地）
-
-```bash
-# 1. 进入项目目录
-cd nominatim-cache
-
-# 2. 安装依赖
-cd server && npm install
-
-# 3. 初始化数据库
-npm run db:init
-
-# 4. 启动开发服务器
-npm run dev
-
-# 5. 访问控制页面
-# Dashboard: http://localhost:3000
-# 缓存列表: http://localhost:3000/list.html
-```
-
-### 7.2 Docker 部署
-
-```bash
-# 构建并启动所有服务
-docker-compose up -d
-
-# 查看日志
-docker-compose logs -f
-
-# 停止服务
-docker-compose down
-```
-
-### 7.3 生产环境（Linux 服务器）
-
-```bash
-# 1. 安装 Node.js (v18+)
-curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -
-sudo apt install nodejs
-
-# 2. 安装 PM2
-sudo npm install -g pm2
-
-# 3. 上传代码并安装依赖
-cd server && npm install --production
-
-# 4. 初始化数据库
-npm run db:init
-
-# 5. 启动服务
-pm2 start ecosystem.config.js
-
-# 6. 配置开机自启
-pm2 startup
-pm2 save
-
-# 7. 配置 Nginx (参考 nginx.conf)
-```
-
-### 7.4 环境变量
-
-```bash
-# .env
-PORT=3000
-NODE_ENV=development
-
-# 数据库
-DATABASE_PATH=./data/cache.db
-
-# Basic Auth
-ADMIN_USERNAME=admin
-ADMIN_PASSWORD=admin123
-
-# Nominatim 上游
-NOMINATIM_PRIMARY=https://api.mirror-earth.com/nominatim/reverse
-NOMINATIM_BACKUP_1=https://photon.komoot.io/reverse
-NOMINATIM_BACKUP_2=https://nominatim.openstreetmap.org/reverse
-
-# 日志保留天数
-LOG_RETENTION_DAYS=30
-
-# 请求间隔 (ms)
-REQUEST_INTERVAL=1000
-```
+详见 [DEPLOYMENT.md](DEPLOYMENT.md)
 
 ---
 
 ## 八、监控和维护
 
-### 8.1 健康检查
-
-```bash
-# 检查服务状态
-curl http://localhost:3000/admin/stats
-
-# 检查数据库
-sqlite3 data/cache.db "SELECT COUNT(*) FROM cache_entries;"
-```
-
-### 8.2 日志位置
-
-| 环境 | 日志位置 |
-|------|----------|
-| 本地开发 | 控制台输出 |
-| Docker | `docker-compose logs app` |
-| PM2 | `pm2 logs` |
-
-### 8.3 备份恢复
-
-```bash
-# 备份
-cp data/cache.db backup/cache_$(date +%Y%m%d).db
-
-# 恢复
-cp backup/cache_20240115.db data/cache.db
-```
+详见 [DEPLOYMENT.md](DEPLOYMENT.md) 中的监控、维护和备份恢复部分。
 
 ---
 

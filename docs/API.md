@@ -2,15 +2,19 @@
 
 ## 一、接口概览
 
-| 接口 | 方法 | 认证 | 说明 |
+| 端点 | 方法 | 认证 | 说明 |
 |------|------|------|------|
-| `/api/reverse` | GET | ❌ | Nominatim 逆地理编码代理 |
-| `/admin/stats` | GET | ✅ | 获取统计信息 |
-| `/admin/cache/list` | GET | ✅ | 获取缓存列表（分页） |
-| `/admin/cache/:key` | GET | ✅ | 获取单个缓存详情 |
-| `/admin/cache/:key` | DELETE | ✅ | 删除单个缓存 |
-| `/admin/cache/clear` | POST | ✅ | 清空所有缓存 |
-| `/admin/logs` | GET | ✅ | 获取访问日志 |
+| `/health` | GET | 否 | 健康检查 |
+| `/api/reverse` | GET | 否 | 逆地理编码 |
+| `/admin/cache/list` | GET | Basic Auth | 缓存列表 |
+| `/admin/cache/:key` | GET | Basic Auth | 缓存详情 |
+| `/admin/cache/:key` | DELETE | Basic Auth | 删除缓存 |
+| `/admin/cache/clear` | POST | Basic Auth | 清空缓存 |
+| `/admin/cache/add` | POST | Basic Auth | 手动添加缓存 |
+| `/admin/logs` | GET | Basic Auth | 访问日志 |
+| `/admin/stats` | GET | Basic Auth | 统计概览 |
+| `/admin/stats/daily` | GET | Basic Auth | 每日统计 |
+| `/admin/query` | POST | Basic Auth | 查询所有上游 |
 
 ## 二、认证方式
 
