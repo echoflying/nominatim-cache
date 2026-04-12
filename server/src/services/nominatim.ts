@@ -253,25 +253,25 @@ export async function fetchNominatim(lat: number, lon: number): Promise<Nominati
         continue;
       }
 
-      if (typeof data === 'string') {
-        if (data.startsWith('<!DOCTYPE') || data.startsWith('<html')) {
-          errors.push(`${source.name}: 返回 HTML`);
-          console.log(`[Nominatim] ${source.name} 返回 HTML，标记失败`);
-          handleFailure(source);
-          continue;
-        }
-        const result = {
-          lat: lat.toString(),
-          lon: lon.toString(),
-          display_name: data.trim(),
-          address: {},
-          error: undefined,
-          _source: source.name
-        };
-        handleSuccess(source);
-        console.log(`[Nominatim] ${source.name} 成功 (字符串)`);
-        return result;
-      }
+       if (typeof data === 'string') {
+         if (data.startsWith('<!DOCTYPE') || data.startsWith('<html') || data.startsWith('<?xml')) {
+           errors.push(`${source.name}: 返回 XML/HTML`);
+           console.log(`[Nominatim] ${source.name} 返回 XML/HTML，标记失败`);
+           handleFailure(source);
+           continue;
+         }
+         const result = {
+           lat: lat.toString(),
+           lon: lon.toString(),
+           display_name: data.trim(),
+           address: {},
+           error: undefined,
+           _source: source.name
+         };
+         handleSuccess(source);
+         console.log(`[Nominatim] ${source.name} 成功 (字符串)`);
+         return result;
+       }
 
       if (isPhotonResponse(data)) {
         console.log(`[Nominatim] ${source.name} 检测到 Photon 格式，转换中...`);
