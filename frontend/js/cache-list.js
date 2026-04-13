@@ -11,9 +11,11 @@ document.addEventListener('DOMContentLoaded', () => {
   const nextBtn = document.getElementById('nextBtn');
   const pageInfo = document.getElementById('pageInfo');
 
-  let currentPage = 1;
-  const pageSize = 20;
-  let currentSearch = '';
+   let currentPage = 1;
+   const pageSize = 20;
+   let currentSearch = '';
+   let sortBy = 'accessed'; // Default to recently accessed
+   let sortOrder = 'desc';  // Descending (most recent first)
 
   const modal = document.getElementById('queryModal');
   const closeModalBtn = document.getElementById('closeQueryModal');
@@ -25,26 +27,29 @@ document.addEventListener('DOMContentLoaded', () => {
 
   let currentQueryData = null;
   let selectedResultIndex = 0;
+  let selectedAddress = {};
 
-  // 加载缓存列表
-  async function loadCacheList() {
-    try {
-      tableBody.innerHTML = '<tr><td colspan="6" class="loading">加载中...</td></tr>';
+   // 加载缓存列表
+   async function loadCacheList() {
+     try {
+       tableBody.innerHTML = '<tr><td colspan="7" class="loading">加载中...</td></tr>';
 
-      const result = await api.getCacheList({
-        page: currentPage,
-        limit: pageSize,
-        search: currentSearch
-      });
+       const result = await api.getCacheList({
+         page: currentPage,
+         limit: pageSize,
+         search: currentSearch,
+         sort: sortBy,
+         order: sortOrder
+       });
 
-      renderTable(result.data);
-      updatePagination(result.pagination);
+       renderTable(result.data);
+       updatePagination(result.pagination);
 
-    } catch (error) {
-      console.error('加载列表失败:', error);
-      tableBody.innerHTML = `<tr><td colspan="6" class="loading">加载失败: ${error.message}</td></tr>`;
-    }
-  }
+     } catch (error) {
+       console.error('加载列表失败:', error);
+       tableBody.innerHTML = `<tr><td colspan="7" class="loading">加载失败: ${error.message}</td></tr>`;
+     }
+   }
 
   // 渲染表格
   function renderTable(data) {
@@ -53,13 +58,15 @@ document.addEventListener('DOMContentLoaded', () => {
       return;
     }
 
-    tableBody.innerHTML = data.map(entry => `
+     tableBody.innerHTML = data.map(entry => {
+      const address = typeof entry.address === 'string' ? JSON.parse(entry.address) : entry.address;
+      return `
       <tr>
-        <td>${entry.lat.toFixed(4)}, ${entry.lon.toFixed(4)}</td>
-        <td>${truncateText(entry.display_name, 30)}</td>
+        <td class="compact-cell">${entry.lat.toFixed(4)}, ${entry.lon.toFixed(4)}</td>
+        <td class="compact-cell">${getAddressShort(address)}</td>
         <td><span class="type-badge">${getTypeLabel(entry.place_type)}</span></td>
         <td><span class="source-badge ${entry.source || 'unknown'}">${getSourceLabel(entry.source)}</span></td>
-        <td>${formatDate(entry.first_cached_at)}</td>
+        <td class="compact-cell">${formatDate(sortBy === 'cached' ? entry.first_cached_at : entry.last_accessed_at)}</td>
         <td>${entry.access_count}</td>
         <td>
           <div class="action-btns">
@@ -68,7 +75,7 @@ document.addEventListener('DOMContentLoaded', () => {
           </div>
         </td>
       </tr>
-    `).join('');
+    `}).join('');
 
     // 绑定事件
     document.querySelectorAll('.action-btn.delete').forEach(btn => {
@@ -86,12 +93,34 @@ document.addEventListener('DOMContentLoaded', () => {
     nextBtn.disabled = !pagination.has_more;
   }
 
-  // 搜索
-  function handleSearch() {
-    currentSearch = searchInput.value.trim();
-    currentPage = 1;
-    loadCacheList();
-  }
+   // 搜索
+   function handleSearch() {
+     currentSearch = searchInput.value.trim();
+     currentPage = 1;
+     loadCacheList();
+   }
+
+   // 切换排序为最近访问
+   function setSortAccessed() {
+     sortBy = 'accessed';
+     sortOrder = 'desc'; // 最近访问在前
+     document.getElementById('sortAccessed').classList.add('active');
+     document.getElementById('sortCached').classList.remove('active');
+     document.getElementById('timeColumnHeader').textContent = '最近访问';
+     currentPage = 1; // 重置到第一页
+     loadCacheList();
+   }
+
+   // 切换排序为首次缓存
+   function setSortCached() {
+     sortBy = 'cached';
+     sortOrder = 'desc'; // 首次缓存也倒序（最新的在前）
+     document.getElementById('sortCached').classList.add('active');
+     document.getElementById('sortAccessed').classList.remove('active');
+     document.getElementById('timeColumnHeader').textContent = '首次缓存';
+     currentPage = 1; // 重置到第一页
+     loadCacheList();
+   }
 
   // 删除缓存
   async function handleDelete(cacheKey, btn) {
@@ -187,6 +216,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (results[selectedIndex]) {
       selectedDisplayNameInput.value = results[selectedIndex].display_name;
+      selectedAddress = results[selectedIndex].address || {};
     }
 
     // 绑定点击事件
@@ -217,7 +247,7 @@ document.addEventListener('DOMContentLoaded', () => {
         lat: currentQueryData.lat,
         lon: currentQueryData.lon,
         display_name: displayName,
-        address: {},
+        address: selectedAddress,
         source: 'manual'
       });
 
@@ -235,6 +265,7 @@ document.addEventListener('DOMContentLoaded', () => {
     modal.classList.remove('show');
     currentQueryData = null;
     selectedResultIndex = 0;
+    selectedAddress = {};
   }
 
   // 上一页
@@ -261,10 +292,16 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 
-  // 刷新
-  refreshBtn.addEventListener('click', () => {
-    loadCacheList();
-  });
+   // 切换排序为最近访问
+   document.getElementById('sortAccessed').addEventListener('click', setSortAccessed);
+
+   // 切换排序为首次缓存
+   document.getElementById('sortCached').addEventListener('click', setSortCached);
+
+   // 刷新
+   refreshBtn.addEventListener('click', () => {
+     loadCacheList();
+   });
 
   // 模态框关闭按钮
   closeModalBtn.addEventListener('click', closeModal);
@@ -315,6 +352,18 @@ document.addEventListener('DOMContentLoaded', () => {
       'manual': '手动'
     };
     return labels[source] || source || '-';
+  }
+
+  // 获取地址简短的3级显示 (返回数据中的前3个非空字段)
+  function getAddressShort(address) {
+    if (!address) return '-';
+    const parts = [];
+    for (const key of Object.keys(address)) {
+      if (address[key] && parts.length < 3) {
+        parts.push(address[key]);
+      }
+    }
+    return parts.length > 0 ? parts.join(', ') : '-';
   }
 
   // 初始化

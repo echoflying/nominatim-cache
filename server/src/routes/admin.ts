@@ -18,8 +18,10 @@ router.get('/cache/list', async (req: Request, res: Response): Promise<void> => 
     const page = parseInt(req.query.page as string) || 1;
     const limit = Math.min(parseInt(req.query.limit as string) || 20, 100);
     const search = req.query.search as string | undefined;
+    const sort = req.query.sort as string | undefined;
+    const order = req.query.order as string | undefined;
 
-    const result = await getAllCaches(page, limit, search);
+    const result = await getAllCaches(page, limit, search, sort, order);
 
     res.json({
       success: true,

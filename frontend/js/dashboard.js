@@ -43,10 +43,12 @@ document.addEventListener('DOMContentLoaded', async () => {
 
       // 绘制简易柱状图
       canvas.width = canvas.parentElement.clientWidth;
-      canvas.height = canvas.parentElement.clientHeight;
+      canvas.height = 350;  // 固定画布高度
 
       const barWidth = (canvas.width - 100) / 7 / 2 - 5;
-      const maxValue = Math.max(...hits, ...misses, 1) * 1.2;
+      const maxHits = Math.max(...hits, 1);
+      const maxMisses = Math.max(...misses, 1);
+      const maxValue = Math.max(maxHits, maxMisses) * 1.3;
 
       // 绘制命中柱
       ctx.fillStyle = '#28a745';
@@ -54,6 +56,12 @@ document.addEventListener('DOMContentLoaded', async () => {
         const x = 50 + i * ((canvas.width - 100) / 7) + 5;
         const height = (hits[i] / maxValue) * (canvas.height - 60);
         ctx.fillRect(x, canvas.height - 40 - height, barWidth, height);
+        if (hits[i] > 0) {
+          ctx.fillStyle = '#28a745';
+          ctx.font = '10px sans-serif';
+          ctx.textAlign = 'center';
+          ctx.fillText(hits[i].toString(), x + barWidth / 2, canvas.height - 40 - height - 5);
+        }
       });
 
       // 绘制未命中柱
@@ -62,6 +70,12 @@ document.addEventListener('DOMContentLoaded', async () => {
         const x = 50 + i * ((canvas.width - 100) / 7) + barWidth + 10;
         const height = (misses[i] / maxValue) * (canvas.height - 60);
         ctx.fillRect(x, canvas.height - 40 - height, barWidth, height);
+        if (misses[i] > 0) {
+          ctx.fillStyle = '#cb2431';
+          ctx.font = '10px sans-serif';
+          ctx.textAlign = 'center';
+          ctx.fillText(misses[i].toString(), x + barWidth / 2, canvas.height - 40 - height - 5);
+        }
       });
 
       // X 轴标签
@@ -72,16 +86,25 @@ document.addEventListener('DOMContentLoaded', async () => {
         ctx.fillText(day, x, canvas.height - 20);
       });
 
-      // 图例
-      ctx.fillStyle = '#28a745';
-      ctx.fillRect(canvas.width - 120, 10, 12, 12);
-      ctx.fillStyle = '#333';
-      ctx.fillText('命中', canvas.width - 100, 20);
+      // 图例 - 用HTML实现
+      const oldLegend = canvas.parentElement.querySelector('#chartLegend');
+      if (oldLegend) oldLegend.remove();
 
-      ctx.fillStyle = '#cb2431';
-      ctx.fillRect(canvas.width - 60, 10, 12, 12);
-      ctx.fillStyle = '#333';
-      ctx.fillText('未命中', canvas.width - 40, 20);
+      const legendDiv = document.createElement('div');
+      legendDiv.id = 'chartLegend';
+      legendDiv.style.cssText = 'position:absolute; top:5px; right:5px; font-size:12px; display:flex; flex-direction:column; gap:2px;';
+      legendDiv.innerHTML = `
+        <div style="display:flex; align-items:center; gap:4px;">
+          <div style="width:10px; height:10px; background:#28a745;"></div>
+          <span>命中</span>
+        </div>
+        <div style="display:flex; align-items:center; gap:4px;">
+          <div style="width:10px; height:10px; background:#cb2431;"></div>
+          <span>未命中</span>
+        </div>
+      `;
+      canvas.parentElement.style.position = 'relative';
+      canvas.parentElement.appendChild(legendDiv);
 
     } catch (error) {
       console.error('加载趋势图失败:', error);

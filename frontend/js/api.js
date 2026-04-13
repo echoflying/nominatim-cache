@@ -70,22 +70,24 @@ class NominatimAPI {
     return result;
   }
 
-  /**
-   * 获取缓存列表
-   */
-  async getCacheList(params = {}) {
-    const searchParams = new URLSearchParams();
-    if (params.page) searchParams.set('page', params.page.toString());
-    if (params.limit) searchParams.set('limit', params.limit.toString());
-    if (params.search) searchParams.set('search', params.search);
+   /**
+    * 获取缓存列表
+    */
+   async getCacheList(params = {}) {
+     const searchParams = new URLSearchParams();
+     if (params.page) searchParams.set('page', params.page.toString());
+     if (params.limit) searchParams.set('limit', params.limit.toString());
+     if (params.search) searchParams.set('search', params.search);
+     if (params.sort) searchParams.set('sort', params.sort);
+     if (params.order) searchParams.set('order', params.order);
 
-    const response = await this.authenticatedFetch(`${this.baseUrl}/admin/cache/list?${searchParams}`);
-    const result = await response.json();
-    if (!result.success) {
-      throw new Error(result.error || 'Failed to get cache list');
-    }
-    return result;
-  }
+     const response = await this.authenticatedFetch(`${this.baseUrl}/admin/cache/list?${searchParams}`);
+     const result = await response.json();
+     if (!result.success) {
+       throw new Error(result.error || 'Failed to get cache list');
+     }
+     return result;
+   }
 
   /**
    * 获取单个缓存详情

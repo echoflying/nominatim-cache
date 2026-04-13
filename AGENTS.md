@@ -1,8 +1,20 @@
 # AGENTS.md - Coding Guidelines for Nominatim Cache Service
 
-## Overview
+## Documentation Files Overview
 
-This document provides guidelines for AI agents working on the Nominatim Cache Service codebase. The project is a Node.js/TypeScript service with an Express backend and vanilla JS frontend.
+| 文件 | 用途 | 读者 |
+|------|------|------|
+| **README.md** | 项目简介、快速开始、使用方法、配置说明 | 用户、外部调用者 |
+| **docs/DESIGN.md** | 需求、架构设计、数据库设计、技术决策 | 开发者、AI Agent |
+| **docs/API.md** | 接口详细文档、参数、响应格式 | 开发者、外部系统 |
+
+### 文档更新原则
+
+**修改代码前先更新文档**，确保文档与实现一致：
+- 新增功能 → 更新 API.md 和 DESIGN.md
+- 修改配置 → 更新 README.md
+- 架构变化 → 更新 DESIGN.md
+- 接口变更 → 更新 API.md
 
 ## Build, Lint, and Test Commands
 
@@ -182,41 +194,11 @@ document.querySelectorAll('.action-btn.delete').forEach(btn => {
 /* Primary: #0366d6, Success: #28a745, Danger: #cb2431 */
 ```
 
-### File Organization
-
-```
-server/src/
-├── index.ts           # Main entry point
-├── routes/            # Express route handlers
-├── services/         # Business logic
-├── middleware/       # Express middleware
-└── utils/            # Helper functions
-
-frontend/
-├── index.html         # Dashboard
-├── list.html          # Cache list
-├── js/               # Frontend scripts
-└── css/              # Stylesheets
-```
-
 ### Commit Style
 
 - Use Chinese comments and log messages (project is Chinese)
 - Keep commits focused and atomic
 - Prefix logs with service name: `[Nominatim]`, `[Cache]`, `[Admin]`
-
-### Key Configuration
-
-```typescript
-// TypeScript: ES2022 target, strict mode enabled
-// ESM modules with .js extensions
-// Path aliases: @/* maps to src/*
-
-// Environment variables
-NOMINATIM_PRIMARY=mirror-earth.com
-NOMINATIM_BACKUP_1=photon.komoot.io
-NOMINATIM_BACKUP_2=openstreetmap.org
-```
 
 ### OSM Compliance (Important)
 
@@ -232,24 +214,6 @@ headers: {
 
 // Rate limiting: 1.5 seconds between calls
 const UPSTREAM_INTERVAL = 1500;
-```
-
-### Database Schema
-
-```sql
-cache_entries (
-  id INTEGER PRIMARY KEY,
-  cache_key TEXT UNIQUE NOT NULL,
-  lat REAL NOT NULL,
-  lon REAL NOT NULL,
-  display_name TEXT,
-  place_type TEXT,
-  source TEXT,
-  nominatim_response TEXT NOT NULL,
-  first_cached_at INTEGER NOT NULL,
-  last_accessed_at INTEGER NOT NULL,
-  access_count INTEGER DEFAULT 1
-)
 ```
 
 ## Summary

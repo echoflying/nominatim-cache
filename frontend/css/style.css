@@ -100,7 +100,8 @@ body {
 
 /* 图表容器 */
 .chart-container {
-  height: 300px;
+  height: 380px;
+  position: relative;
 }
 
 /* 操作按钮 */
@@ -162,6 +163,39 @@ body {
   display: flex;
   gap: 12px;
   margin-bottom: 20px;
+  flex-wrap: wrap;
+}
+
+/* 排序按钮组 */
+.sort-group {
+  display: flex;
+  gap: 8px;
+}
+
+/* 排序按钮样式 */
+.btn-sort {
+  background-color: #e1e4e8;
+  color: #24292e;
+  border: none;
+  border-radius: 6px;
+  padding: 8px 16px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.btn-sort:hover {
+  background-color: #d1d5da;
+}
+
+.btn-sort.active {
+  background-color: #0366d6;
+  color: #fff;
+}
+
+.btn-sort.active:hover {
+  background-color: #0256b9;
 }
 
 .toolbar-note {
@@ -209,6 +243,14 @@ body {
 
 .data-table tbody tr:hover {
   background-color: #f6f8fa;
+}
+
+.data-table .compact-cell {
+  font-size: 12px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 120px;
 }
 
 .data-table .loading {

@@ -78,6 +78,7 @@ function createTables(): void {
       lat REAL NOT NULL,
       lon REAL NOT NULL,
       display_name TEXT,
+      address TEXT,
       place_type TEXT,
       source TEXT,
       nominatim_response TEXT NOT NULL,
@@ -86,6 +87,13 @@ function createTables(): void {
       access_count INTEGER DEFAULT 1
     )
   `);
+
+  // 如果 address 列不存在，添加它
+  try {
+    db.exec(`ALTER TABLE cache_entries ADD COLUMN address TEXT`);
+  } catch (e) {
+    // 列已存在，忽略
+  }
 
   // 统计表
   db.exec(`

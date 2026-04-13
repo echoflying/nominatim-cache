@@ -120,14 +120,12 @@ nominatim-cache/
 ├── frontend/                        # 前端页面
 │   ├── index.html                  # Dashboard 页面
 │   ├── list.html                   # 缓存清单页面
-│   ├── requests.html               # 请求日志页面
 │   ├── css/
 │   │   └── style.css              # 公共样式
 │   └── js/
 │       ├── api.js                  # API 客户端封装
 │       ├── dashboard.js            # Dashboard 逻辑
-│       ├── cache-list.js           # 缓存列表逻辑
-│       └── request-list.js         # 请求日志逻辑
+│       └── cache-list.js           # 缓存列表逻辑
 │
 ├── docs/                           # 文档
 │   ├── DESIGN.md                   # 本设计文档
@@ -168,17 +166,26 @@ CREATE TABLE cache_entries (
     lat REAL NOT NULL,                    -- 纬度
     lon REAL NOT NULL,                   -- 经度
     display_name TEXT,                   -- 显示名称
+    address TEXT,                        -- 地址详情 (JSON格式)
     place_type TEXT,                     -- 地点类型: temple, peak, city, street, other
+    source TEXT,                         -- 数据来源: mirror-earth.com, photon.komoot.io, openstreetmap.org, manual
     nominatim_response TEXT NOT NULL,    -- 完整的 Nominatim JSON 响应
     first_cached_at INTEGER NOT NULL,    -- 首次缓存时间 (Unix timestamp)
     last_accessed_at INTEGER NOT NULL,   -- 最后访问时间 (Unix timestamp)
-    access_count INTEGER DEFAULT 1      -- 访问次数
+    access_count INTEGER DEFAULT 1       -- 访问次数
 );
 
 CREATE INDEX idx_cache_key ON cache_entries(cache_key);
 CREATE INDEX idx_lat_lon ON cache_entries(lat, lon);
 CREATE INDEX idx_first_cached ON cache_entries(first_cached_at DESC);
+CREATE INDEX idx_last_accessed ON cache_entries(last_accessed_at DESC);
 ```
+
+**字段说明：**
+- `address`: 存储地址详情JSON，包含 country, state, city, district, suburb, road 等字段
+- `source`: 记录数据来源于哪个上游服务
+- `last_accessed_at` 索引用于"最近访问"排序
+- `first_cached_at` 索引用于"首次缓存"排序
 
 #### 4.2.2 stats (统计表)
 

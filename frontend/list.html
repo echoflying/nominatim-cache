@@ -13,26 +13,30 @@
       <h1>缓存清单</h1>
     </header>
 
-    <section class="card">
-      <div class="toolbar">
-        <input type="text" id="searchInput" placeholder="搜索地名..." class="search-input">
-        <button class="btn btn-primary" id="searchBtn">搜索</button>
-        <button class="btn btn-secondary" id="refreshBtn">刷新</button>
-      </div>
+     <section class="card">
+       <div class="toolbar">
+         <input type="text" id="searchInput" placeholder="搜索地名..." class="search-input">
+         <button class="btn btn-primary" id="searchBtn">搜索</button>
+         <div class="sort-group">
+           <button class="btn btn-sort active" id="sortAccessed">最近访问</button>
+           <button class="btn btn-sort" id="sortCached">首次缓存</button>
+         </div>
+         <button class="btn btn-secondary" id="refreshBtn">刷新</button>
+       </div>
 
       <div class="table-container">
         <table class="data-table">
-          <thead>
-            <tr>
-              <th>坐标</th>
-              <th>地名</th>
-              <th>类型</th>
-              <th>来源</th>
-              <th>首次缓存</th>
-              <th>访问次</th>
-              <th>操作</th>
-            </tr>
-          </thead>
+           <thead>
+             <tr>
+               <th>坐标</th>
+               <th>地名</th>
+               <th>类型</th>
+               <th>来源</th>
+               <th id="timeColumnHeader">最近访问</th>
+               <th>访问次</th>
+               <th>操作</th>
+             </tr>
+           </thead>
           <tbody id="cacheTableBody">
             <tr>
               <td colspan="7" class="loading">加载中...</td>

@@ -156,8 +156,7 @@ Authorization: Basic YWRtaW46YWRtaW4xMjM=
 | page | int | ❌ | 1 | 页码 |
 | limit | int | ❌ | 20 | 每页数量 (最大 100) |
 | search | string | ❌ | - | 搜索关键词 (匹配 display_name) |
-| type | string | ❌ | - | 过滤类型: temple, peak, city, street, other |
-| sort | string | ❌ | accessed | 排序字段: accessed, cached, name |
+| sort | string | ❌ | accessed | 排序字段: accessed (最近访问), cached (首次缓存) |
 | order | string | ❌ | desc | 排序方向: asc, desc |
 
 **响应示例:**
@@ -170,7 +169,15 @@ Authorization: Basic YWRtaW46YWRtaW4xMjM=
       "lat": 30.2875,
       "lon": 120.1615,
       "display_name": "灵隐寺, 灵隐路, 西湖区, 杭州市, 浙江省, 中国",
+      "address": {
+        "road": "灵隐路",
+        "city_district": "西湖区",
+        "city": "杭州市",
+        "state": "浙江省",
+        "country": "中国"
+      },
       "place_type": "temple",
+      "source": "mirror-earth.com",
       "first_cached_at": 1704067200,
       "last_accessed_at": 1704153600,
       "access_count": 156

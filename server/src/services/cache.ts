@@ -81,20 +81,23 @@ export async function setCache(
     `).get(cacheKey);
 
     if (existing) {
+      const addressJson = nominatimData.address ? JSON.stringify(nominatimData.address) : null;
       db.prepare(`
         UPDATE cache_entries
-        SET last_accessed_at = ?, access_count = access_count + 1
+        SET last_accessed_at = ?, access_count = access_count + 1, address = ?
         WHERE cache_key = ?
-      `).run(now, cacheKey);
+      `).run(now, addressJson, cacheKey);
     } else {
+      const addressJson = nominatimData.address ? JSON.stringify(nominatimData.address) : null;
       db.prepare(`
-        INSERT INTO cache_entries (cache_key, lat, lon, display_name, place_type, source, nominatim_response, first_cached_at, last_accessed_at, access_count)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
+        INSERT INTO cache_entries (cache_key, lat, lon, display_name, address, place_type, source, nominatim_response, first_cached_at, last_accessed_at, access_count)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
       `).run(
         cacheKey,
         lat,
         lon,
         parsed.display_name,
+        addressJson,
         parsed.place_type,
         source || null,
         parsed.full_response,
@@ -176,9 +179,11 @@ export async function getCacheEntry(cacheKey: string): Promise<any | null> {
  * 获取所有缓存 (分页)
  */
 export async function getAllCaches(
-  page: number = 1,
-  limit: number = 20,
-  search?: string
+   page: number = 1,
+   limit: number = 20,
+   search?: string,
+   sort?: string,
+   order?: string
 ): Promise<{ data: any[]; total: number; totalPages: number }> {
   try {
     const db = getDatabase();
@@ -198,14 +203,32 @@ export async function getAllCaches(
     `).get(...params) as any;
     const total = totalRow.count;
 
-    // 获取列表
-    const rows = db.prepare(`
-      SELECT cache_key, lat, lon, display_name, place_type, source, first_cached_at, last_accessed_at, access_count
-      FROM cache_entries
-      ${whereClause}
-      ORDER BY last_accessed_at DESC
-      LIMIT ? OFFSET ?
-    `).all(...params, limit, offset) as any[];
+     // Determine sort column and order
+     const sortColumn = sort === 'cached' ? 'first_cached_at' : 'last_accessed_at';
+     const sortDirection = (order && order.toUpperCase() === 'ASC') ? 'ASC' : 'DESC';
+     
+     // 获取列表
+     const rows = db.prepare(`
+       SELECT cache_key, lat, lon, display_name, address, nominatim_response, place_type, source, first_cached_at, last_accessed_at, access_count
+       FROM cache_entries
+       ${whereClause}
+       ORDER BY ${sortColumn} ${sortDirection}
+       LIMIT ? OFFSET ?
+     `).all(...params, limit, offset) as any[];
+
+     // 如果 address 为空，尝试从 nominatim_response 中提取
+     for (const row of rows) {
+       if (!row.address && row.nominatim_response) {
+         try {
+           const response = JSON.parse(row.nominatim_response);
+           if (response.address) {
+             row.address = JSON.stringify(response.address);
+           }
+         } catch (e) {
+           // 忽略解析错误
+         }
+       }
+     }
 
     return {
       data: rows,
