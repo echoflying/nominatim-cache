@@ -273,6 +273,20 @@ body {
   color: #0366d6;
 }
 
+.quality-badge {
+  display: inline-block;
+  margin: 3px 0;
+  padding: 1px 6px;
+  border-radius: 10px;
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.quality-badge.precise { background: #e6ffed; color: #22863a; }
+.quality-badge.regional { background: #e8f4fd; color: #0366d6; }
+.quality-badge.coarse { background: #ffe3e6; color: #b31d28; }
+.quality-badge.none { background: #f0f0f0; color: #586069; }
+
 .source-badge {
   background-color: #f0f0f0;
   color: #586069;

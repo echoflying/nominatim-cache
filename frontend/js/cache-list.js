@@ -63,7 +63,11 @@ document.addEventListener('DOMContentLoaded', () => {
       return `
       <tr>
         <td class="compact-cell">${entry.lat.toFixed(4)}, ${entry.lon.toFixed(4)}</td>
-        <td class="compact-cell">${getAddressShort(address)}</td>
+        <td class="compact-cell">
+          <div>${escapeHtml(String(entry.place_name || '未找到具体地名'))}</div>
+          <span class="quality-badge ${entry.place_quality || 'none'}">${getPlaceQualityLabel(entry.place_quality)}</span>
+          <small>${escapeHtml(getAddressShort(address))}</small>
+        </td>
         <td><span class="type-badge">${getTypeLabel(entry.place_type)}</span></td>
         <td><span class="source-badge ${entry.source || 'unknown'}">${getSourceLabel(entry.source)}</span></td>
         <td class="compact-cell">${formatDate(sortBy === 'cached' ? entry.first_cached_at : entry.last_accessed_at)}</td>
@@ -352,6 +356,11 @@ document.addEventListener('DOMContentLoaded', () => {
       'manual': '手动'
     };
     return labels[source] || source || '-';
+  }
+
+  function getPlaceQualityLabel(quality) {
+    const labels = { precise: '具体地点', regional: '区域名称', coarse: '地址过粗', none: '无有效名称' };
+    return labels[quality] || '未判定';
   }
 
   // 获取地址简短的3级显示 (返回数据中的前3个非空字段)

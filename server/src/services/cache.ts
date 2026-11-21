@@ -3,13 +3,17 @@
  */
 
 import { getDatabase } from './database.js';
-import { parseNominatimResponse, NominatimResponse } from './nominatim.js';
+import { parseNominatimResponse, NominatimResponse, selectDisplayPlace } from './nominatim.js';
 
 interface CacheData {
   lat: string;
   lon: string;
   display_name: string;
   address: Record<string, any>;
+  place_name: string;
+  place_level: string;
+  place_quality: 'precise' | 'regional' | 'coarse' | 'none';
+  place_source_field: string;
   cached: boolean;
   cache_stats?: {
     first_cached_at: number;
@@ -47,6 +51,7 @@ export async function getCache(cacheKey: string): Promise<CacheData | null> {
       lon: response.lon,
       display_name: row.display_name,
       address: response.address,
+      ...selectDisplayPlace(response),
       cached: true as const,
       cache_stats: {
         first_cached_at: row.first_cached_at,
@@ -164,6 +169,7 @@ export async function getCacheEntry(cacheKey: string): Promise<any | null> {
       place_type: row.place_type,
       source: row.source,
       nominatim_response: JSON.parse(row.nominatim_response),
+      ...selectDisplayPlace(JSON.parse(row.nominatim_response)),
       first_cached_at: row.first_cached_at,
       last_accessed_at: row.last_accessed_at,
       access_count: row.access_count
@@ -218,15 +224,12 @@ export async function getAllCaches(
 
      // 如果 address 为空，尝试从 nominatim_response 中提取
      for (const row of rows) {
-       if (!row.address && row.nominatim_response) {
-         try {
-           const response = JSON.parse(row.nominatim_response);
-           if (response.address) {
-             row.address = JSON.stringify(response.address);
-           }
-         } catch (e) {
-           // 忽略解析错误
-         }
+       try {
+         const response = JSON.parse(row.nominatim_response);
+         Object.assign(row, selectDisplayPlace(response));
+         if (!row.address && response.address) row.address = JSON.stringify(response.address);
+       } catch (_) {
+         Object.assign(row, { place_name: '', place_level: 'unknown', place_quality: 'none', place_source_field: 'none' });
        }
      }
 

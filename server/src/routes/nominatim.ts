@@ -4,7 +4,7 @@
 
 import { Router, Request, Response } from 'express';
 import { getCache, setCache } from '../services/cache.js';
-import { fetchNominatim, parseNominatimResponse } from '../services/nominatim.js';
+import { fetchNominatim, parseNominatimResponse, selectDisplayPlace } from '../services/nominatim.js';
 import { saveAccessLog } from '../middleware/logger.js';
 
 const router = Router();
@@ -33,6 +33,7 @@ router.get('/', async (req: Request, res: Response): Promise<void> => {
     if (cached) {
       const displayName = cached.display_name?.slice(0, 30) || '未知';
       console.log(`[Nominatim] ${new Date().toISOString()} 缓存命中: ${cacheKey} - ${displayName}...`);
+      if (cached.place_quality === 'coarse') console.warn('[Nominatim] 缓存地址质量过粗');
       res.json(cached);
       await saveAccessLog(req, true, true);
       return;
@@ -48,13 +49,15 @@ router.get('/', async (req: Request, res: Response): Promise<void> => {
     console.log(`[Nominatim] ${new Date().toISOString()} 上游返回: ${displayName}...`);
 
     const parsed = parseNominatimResponse(nominatimData);
+    const displayPlace = selectDisplayPlace(nominatimData);
+    if (displayPlace.place_quality === 'coarse') console.warn('[Nominatim] 上游地址质量过粗');
 
     // 3. 存入缓存
     await setCache(cacheKey, lat, lon, parsed, nominatimData, nominatimData._source);
     console.log(`[Nominatim] ${new Date().toISOString()} 已缓存: ${cacheKey} - ${displayName}...`);
 
     // 4. 返回 Nominatim 官方格式
-    res.json(nominatimData);
+    res.json({ ...nominatimData, ...displayPlace });
     // 未命中缓存，标记 cached=0
     await saveAccessLog(req, false, true);
 

@@ -184,6 +184,7 @@ CREATE INDEX idx_last_accessed ON cache_entries(last_accessed_at DESC);
 **字段说明：**
 - `address`: 存储地址详情JSON，包含 country, state, city, district, suburb, road 等字段
 - `source`: 记录数据来源于哪个上游服务
+- 地点显示名称从 POI、道路、街区、乡镇、县区、市级到省级按细到粗选择。候选值标记精度与原始字段来源，省级单独结果及多层行政区划拼成的长地址标为粗略，不作为展示名称；原始响应保持不变。缓存命中与未命中都按同一解析规则派生显示元数据。
 - `last_accessed_at` 索引用于"最近访问"排序
 - `first_cached_at` 索引用于"首次缓存"排序
 

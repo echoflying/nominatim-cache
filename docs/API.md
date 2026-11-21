@@ -71,6 +71,10 @@ curl "http://localhost:3000/api/reverse?lat=30.28746&lon=120.16145&format=jsonv2
   "lat": "30.2874600",
   "lon": "120.1614500",
   "display_name": "灵隐寺, 灵隐路, 西湖区, 杭州市, 浙江省, 中国",
+  "place_name": "灵隐寺",
+  "place_level": "poi",
+  "place_quality": "precise",
+  "place_source_field": "name",
   "address": {
     "tourism": "temple",
     "road": "灵隐路",
@@ -86,6 +90,9 @@ curl "http://localhost:3000/api/reverse?lat=30.28746&lon=120.16145&format=jsonv2
 ```
 
 > **说明:** 接口完全兼容 Nominatim 官方 API 格式，缓存状态对调用方透明。
+> 服务额外返回 `place_name`、`place_level`、`place_quality` 与 `place_source_field`。调用方展示地点时优先使用 `place_name`。只有省级地址或由多层行政区划拼成的宽泛长地址会标为 `coarse`，`place_name` 为空；服务日志记录不带坐标和地址内容的质量告警，原始 `display_name` 和完整响应继续留在已有管理缓存中。质量等级为 `precise`、`regional`、`coarse` 或 `none`。
+
+管理端 `/admin/cache/list` 同时返回相同的地点名称、精度等级和来源字段，缓存列表显示“地址过粗”或“无有效名称”标记，便于发现历史及新入库的低质量结果。
 ```json
 {
   "success": false,

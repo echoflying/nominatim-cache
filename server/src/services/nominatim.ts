@@ -16,8 +16,81 @@ export interface NominatimResponse {
   extratags?: Record<string, any>;
   type?: string;
   class?: string;
+  category?: string;
   error?: string;
   _source?: string;
+  place_name?: string;
+  place_level?: string;
+  place_quality?: 'precise' | 'regional' | 'coarse' | 'none';
+  place_source_field?: string;
+}
+
+export interface DisplayPlace {
+  place_name: string;
+  place_level: string;
+  place_quality: 'precise' | 'regional' | 'coarse' | 'none';
+  place_source_field: string;
+  quality_reason?: string;
+}
+
+const readablePoiCategories = new Set(['amenity', 'shop', 'tourism', 'office', 'leisure']);
+const placeAddressFields = [
+  'name', 'road', 'street', 'pedestrian', 'path', 'neighbourhood', 'suburb',
+  'town', 'village', 'district', 'county', 'city', 'municipality', 'state',
+] as const;
+
+function isBroadAdministrativePath(value: string): boolean {
+  const normalized = value.replace(/[\s,，、]/g, '');
+  const beginsWithProvince = /^(北京|天津|上海|重庆|新疆|西藏|广西|宁夏|内蒙古|黑龙江|吉林|辽宁|河北|山西|江苏|浙江|安徽|福建|江西|山东|河南|湖北|湖南|广东|海南|四川|贵州|云南|陕西|甘肃|青海)/.test(normalized);
+  const administrativeUnits = normalized.match(/省|自治区|特别行政区|市|自治州|州|盟|地区|区|县|旗|镇|乡|街道/g)?.length ?? 0;
+  return beginsWithProvince && normalized.length >= 18 && administrativeUnits >= 3;
+}
+
+export function selectDisplayPlace(data: NominatimResponse): DisplayPlace {
+  const address = data.address ?? {};
+  const category = String(data.class ?? data.category ?? '');
+  const type = String(data.type ?? '');
+  const objectName = typeof (data as any).name === 'string' ? (data as any).name.trim() : '';
+  if (objectName && (readablePoiCategories.has(category) || (category === 'building' && type !== 'yes'))) {
+    return { place_name: objectName, place_level: 'poi', place_quality: 'precise', place_source_field: 'name' };
+  }
+
+  let rejected: { field: string; value: string } | null = null;
+  for (const field of placeAddressFields) {
+    const value = typeof address[field] === 'string' ? address[field].trim() : '';
+    if (!value) continue;
+    if (field === 'state') {
+      rejected ??= { field, value };
+      continue;
+    }
+    if (isBroadAdministrativePath(value)) {
+      rejected ??= { field, value };
+      continue;
+    }
+    const level = ['road', 'street', 'pedestrian', 'path'].includes(field) ? 'street'
+      : ['neighbourhood', 'suburb'].includes(field) ? 'neighbourhood'
+      : ['town', 'village'].includes(field) ? 'locality'
+      : ['district', 'county'].includes(field) ? 'district'
+      : ['city', 'municipality'].includes(field) ? 'city' : 'regional';
+    return {
+      place_name: value,
+      place_level: level,
+      place_quality: ['city', 'regional'].includes(level) ? 'regional' : 'precise',
+      place_source_field: `address.${field}`,
+    };
+  }
+
+  const firstDisplayPart = data.display_name?.split(',')[0]?.trim() ?? '';
+  if (firstDisplayPart && !isBroadAdministrativePath(firstDisplayPart) && !rejected) {
+    return { place_name: firstDisplayPart, place_level: 'label', place_quality: 'regional', place_source_field: 'display_name' };
+  }
+  if (rejected) {
+    return {
+      place_name: '', place_level: 'province', place_quality: 'coarse',
+      place_source_field: `address.${rejected.field}`, quality_reason: '只有省级地址或包含多层行政区划的长地址',
+    };
+  }
+  return { place_name: '', place_level: 'unknown', place_quality: 'none', place_source_field: 'none' };
 }
 
 interface UpstreamSource {
