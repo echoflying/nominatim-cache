@@ -5,7 +5,7 @@
 class NominatimAPI {
   constructor(baseUrl = '') {
     this.baseUrl = baseUrl;
-    this.authStorageKey = 'nominatim_auth';
+    this.credentials = null;
     this.authPromptMessage = '请输入管理后台账号和密码';
     this.lastCredentialSource = 'none';
   }
@@ -198,7 +198,7 @@ class NominatimAPI {
   }
 
   ensureCredentials(forcePrompt = false) {
-    let credentials = forcePrompt ? null : localStorage.getItem(this.authStorageKey);
+    let credentials = forcePrompt ? null : this.credentials;
     if (credentials) {
       this.lastCredentialSource = 'stored';
       return credentials;
@@ -217,15 +217,21 @@ class NominatimAPI {
     }
 
     credentials = btoa(`${username}:${password}`);
-    localStorage.setItem(this.authStorageKey, credentials);
+    this.credentials = credentials;
     this.lastCredentialSource = 'prompt';
     return credentials;
   }
 
   clearStoredAuth() {
-    localStorage.removeItem(this.authStorageKey);
+    this.credentials = null;
   }
 }
 
 // 导出实例
-const api = new NominatimAPI();
+try {
+  globalThis.localStorage?.removeItem('nominatim_auth');
+} catch {
+  // 浏览器禁用存储时仍可使用当前页面。
+}
+const baseUrl = globalThis.location ? new URL('./', globalThis.location.href).href.replace(/\/$/, '') : '';
+const api = new NominatimAPI(baseUrl);

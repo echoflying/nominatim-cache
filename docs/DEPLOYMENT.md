@@ -4,6 +4,25 @@
 
 如果部署目标是一台通过 Tailscale 访问的 Mac mini，请直接参考 `docs/deploy/macmini-tailscale.md`。
 
+Go + MariaDB 重写及向 Raven 迁移的后续方案见 [Nominatim Cache v2 重写与 Raven 迁移计划](deploy/nominatim-cache-v2-raven.md)。
+Raven 首次部署所用的实际端口、数据库和切换步骤见 [Raven 部署执行单](deploy/raven-cutover.md)。
+
+## Go v2 本地运行与发布
+
+从 `backend/` 使用 Go 1.26 构建。使用专用 MariaDB 库，按 `deploy/raven/backend.env.example` 设置进程环境。运行前用具有建表权限的 `MIGRATE_DSN` 执行 `go run ./cmd/nc-migrate schema`。然后使用应用账号的 `MARIADB_DSN` 执行 `go run ./cmd/nominatim-cache`。导入使用 `go run ./cmd/nc-migrate sqlite -snapshot /path/to/cache.db`，可加 `-dry-run` 仅检查来源。导入目标必须为空，重复导入相同快照只返回原回执。运行与迁移的连接信息都从进程环境读取。
+
+公开 API 默认监听 `127.0.0.1:3000`，路径前缀用 `BASE_PATH` 指定。管理页面和管理 API 默认监听 `127.0.0.1:3001`，用 `ADMIN_LISTEN_ADDR` 配置独立回环地址，用 `FRONTEND_DIR` 指定静态资源目录。生产用独立的私有 HTTPS 管理入口，并设置非默认管理账号与密码。管理凭据只保留在当前页面内存，旧存储键会清理，首次发布时轮换旧凭据。
+
+生产必须通过 `NOMINATIM_PRIMARY`、`NOMINATIM_BACKUP_1`、`NOMINATIM_BACKUP_2` 至少配置一个交互上游。`REVERSE_COLD_LIMIT` 默认允许 16 个未命中的同步请求同时进入查询流程。`LEGACY_HOST` 默认是 `nc.zaitu.cn`，`LEGACY_TIMEOUT_MS` 默认 6500，范围 1000 至 7000 毫秒。旧域名使用随包的直接反代片段，保留原来的地址和 Host，供现有 Altview 调用。发布验收应同时检查健康、冷查询、缓存命中、旧域名路径和公开入口对管理路由的隔离。
+
+用 `BATCH_TOKENS` 配置具有独立身份的试用调用方，格式为 `caller=token,other=token`。另用 `NOMINATIM_BATCH_URL` 配置获准批量使用的自建或签约源。缺省只允许批量命中缓存。公共上游的用量及政策见 [批量设计](deploy/nominatim-cache-v2-raven.md#3-批量接口与队列)。
+
+新增 SQL 若已确认可与现有程序共用，文件名用 `003_compat002_description.sql` 表示最低兼容版本 002。没有 `compat` 标记的新增迁移要求对应新版程序。旧程序始终校验自己认识的迁移内容，并在新迁移执行期间停止启动。将兼容性声明纳入迁移演练，包含一次旧二进制的启动验证。
+
+回退到 Node 时，先暂停接收写入并停止 Go 服务，再用 `nc-migrate export-sqlite -output /path/to/new-cache.db` 从 `MIGRATE_DSN` 指定的 MariaDB 导出新 SQLite。输出路径必须不存在。命令校验三表的内容摘要和 SQLite 完整性，再生成文件和回执。保留迁移前 SQLite 与 MariaDB 的备份，用导出的文件启动旧程序做验证。批量任务只保留在 MariaDB，切回 Node 前暂停批量提交。
+
+在 Linux/WSL 的仓库根目录运行 `bash scripts/build-raven.sh v2.0.0-rc.1` 生成 Linux amd64 包及校验值。先按样例配置 systemd 和 Nginx，再切换流量。以下两种部署方式适用于 Node 版。
+
 ## 部署前要求
 
 - Linux 服务器

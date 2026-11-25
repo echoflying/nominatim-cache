@@ -6,6 +6,9 @@
 |------|------|------|------|
 | `/health` | GET | 否 | 健康检查 |
 | `/api/reverse` | GET | 否 | 逆地理编码 |
+| `/api/reverse/batches` | POST | Bearer | 提交批量反查（Go v2） |
+| `/api/reverse/batches/{job_id}` | GET | Bearer | 查看批次状态（Go v2） |
+| `/api/reverse/batches/{job_id}/results` | GET | Bearer | 分页读取批次结果（Go v2） |
 | `/admin/cache/list` | GET | Basic Auth | 缓存列表 |
 | `/admin/cache/:key` | GET | Basic Auth | 缓存详情 |
 | `/admin/cache/:key` | DELETE | Basic Auth | 删除缓存 |
@@ -38,6 +41,20 @@ curl -u admin:admin123 http://localhost:3000/admin/stats
 ---
 
 ## 三、接口详情
+
+Go v2 部署时可以在路径前加 `/nominatim`。`GET /health` 保留原有 `status`、`service`、`environment`、`timestamp` 和 `uptime`。新增 `version`、`commit` 和 `database_ready`。数据库无法访问时返回 503。
+
+公开入口提供健康检查、单点和批量 API。管理页面及 `/admin/*` 由独立监听地址提供，通过受限入口访问。
+
+### 批量逆地理编码（Go v2）
+
+使用 `Authorization: Bearer <token>`。提交请求需要 `Idempotency-Key`（1 至 128 字节）。同一个调用方、同一个键且坐标列表相同时返回已有任务。键相同但请求内容不同时返回 409。
+
+提交示例为 `POST /api/reverse/batches`，请求体为 `{"points":[{"lat":30.28746,"lon":120.16145}]}`，默认接受 1 至 500 个点。返回 202 和 `Location` 头，正文包括 `job_id`、`status`、`total`、`pending`、`completed`、`failed`、`status_url` 和 `results_url`。状态为 `pending`、`running`、`completed` 或 `completed_with_errors`。待处理额度不足返回 429，并提供 `Retry-After`。
+
+用状态接口轮询，建议两次查询间隔至少 2 秒。结果接口接受 `page`、`limit`（默认 100，最大 500），按提交顺序返回 `items`，每项含从 0 开始的 `index`、`lat`、`lon` 及 `status`。已完成项携带 `result`。暂时失败项可能携带 `error`、`retry_at`，错误结束项携带 `error`。结果状态为 `cached`、`resolved`、`pending`、`running`、`no_result` 或 `failed`。服务保留完成的任务 7 天。过期或属于其他调用方的任务返回 404。
+
+批量查询优先复用缓存。未配置获准批量查询的上游时，未命中的点标记 `batch_source_unavailable`，其他点仍返回已有结果。批量接口的启用与上游配置见 [部署说明](DEPLOYMENT.md)。
 
 ### 3.1 Nominatim 逆地理编码代理
 
@@ -89,18 +106,15 @@ curl "http://localhost:3000/api/reverse?lat=30.28746&lon=120.16145&format=jsonv2
 }
 ```
 
-> **说明:** 接口完全兼容 Nominatim 官方 API 格式，缓存状态对调用方透明。
+> **说明:** 接口接受 `lat` 和 `lon`，返回 Nominatim 风格的数据。其他请求参数被忽略，上游格式与语言由服务设置。缓存命中附带 `cached: true` 和 `cache_stats`。
 > 服务额外返回 `place_name`、`place_level`、`place_quality` 与 `place_source_field`。调用方展示地点时优先使用 `place_name`。只有省级地址或由多层行政区划拼成的宽泛长地址会标为 `coarse`，`place_name` 为空；服务日志记录不带坐标和地址内容的质量告警，原始 `display_name` 和完整响应继续留在已有管理缓存中。质量等级为 `precise`、`regional`、`coarse` 或 `none`。
 
-管理端 `/admin/cache/list` 同时返回相同的地点名称、精度等级和来源字段，缓存列表显示“地址过粗”或“无有效名称”标记，便于发现历史及新入库的低质量结果。
+管理端 `/admin/cache/list` 同时返回相同的地点名称、精度等级和来源字段，缓存列表显示“地址过粗”或“无有效名称”标记，便于发现历史及新入库的低质量结果。上游全失败时返回 HTTP 500，响应只包含 `error`。未命中查询达到并发上限时立即返回 HTTP 503，带 `Retry-After: 2`，缓存命中照常返回。
+
+旧域名 `nc.zaitu.cn` 直接反代同一个同步接口。由该域名收到的请求默认有 6.5 秒的查询预算，为已有 Altview 客户端的 8 秒读取超时预留余量。上游慢或拥堵时仍可能返回查询失败。批量查询通过任务接口处理。
 ```json
 {
-  "success": false,
-  "error": "所有上游 Nominatim 服务均不可用",
-  "details": [
-    "Error: connect ETIMEDOUT",
-    "Error: Service unavailable"
-  ]
+  "error": "所有上游 Nominatim 服务均不可用: <原因>"
 }
 ```
 

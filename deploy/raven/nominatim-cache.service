@@ -1,0 +1,23 @@
+[Unit]
+Description=Nominatim Cache v2
+After=network-online.target nominatim-cache-db.service
+Wants=network-online.target
+Requires=nominatim-cache-db.service
+
+[Service]
+Type=simple
+User=nominatim-cache
+Group=nominatim-cache
+EnvironmentFile=/etc/nominatim-cache/backend.env
+WorkingDirectory=/opt/nominatim-cache/current
+ExecStart=/opt/nominatim-cache/current/bin/nominatim-cache
+Restart=on-failure
+RestartSec=3s
+TimeoutStopSec=130s
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+
+[Install]
+WantedBy=multi-user.target

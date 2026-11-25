@@ -1,0 +1,23 @@
+[Unit]
+Description=MariaDB for Nominatim Cache
+RequiresMountsFor=/mnt/datadisk0/nominatim-cache
+
+[Service]
+Type=notify
+User=nominatim-cache-db
+Group=nominatim-cache-db
+RuntimeDirectory=nominatim-cache-db
+RuntimeDirectoryMode=0755
+ExecStart=/mnt/datadisk0/nominatim-cache/vendor/mariadb-11.4.13/bin/mariadbd --defaults-file=/etc/nominatim-cache/mariadb.cnf
+Restart=on-failure
+RestartSec=5s
+TimeoutStartSec=120s
+TimeoutStopSec=120s
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+ReadWritePaths=/mnt/datadisk0/nominatim-cache/mariadb
+
+[Install]
+WantedBy=multi-user.target

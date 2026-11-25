@@ -101,15 +101,19 @@ test('invalid prompted credentials do not trigger an immediate reprompt loop', a
   assert.equal(harness.fetchCalls.length, 1);
 });
 
-test('stored invalid credentials retry once with fresh prompt', async () => {
+test('credentials stay in memory and an expired credential retries once', async () => {
   let callCount = 0;
   const harness = createApiHarness({
     storedAuth: 'b2xkOnBhc3M=',
-    promptValues: ['tester', 'secret-pass'],
+    promptValues: ['tester', 'first-pass', 'tester', 'secret-pass'],
     fetchImpl: async (url, options) => {
       callCount += 1;
       if (callCount === 1) {
-        assert.equal(options.headers.Authorization, 'Basic b2xkOnBhc3M=');
+        assert.equal(options.headers.Authorization, 'Basic ' + Buffer.from('tester:first-pass').toString('base64'));
+        return createResponse(200, { success: true, data: { cache_count: 1 } });
+      }
+      if (callCount === 2) {
+        assert.equal(options.headers.Authorization, 'Basic ' + Buffer.from('tester:first-pass').toString('base64'));
         return createResponse(401, {
           success: false,
           error: 'Invalid credentials'
@@ -124,9 +128,12 @@ test('stored invalid credentials retry once with fresh prompt', async () => {
     }
   });
 
+  assert.equal(harness.storage.size, 0);
+  await harness.api.getStats();
   const result = await harness.api.getStats();
 
   assert.deepEqual(result, { cache_count: 1 });
-  assert.equal(harness.prompts.length, 2);
-  assert.equal(harness.fetchCalls.length, 2);
+  assert.equal(harness.prompts.length, 4);
+  assert.equal(harness.fetchCalls.length, 3);
+  assert.equal(harness.storage.size, 0);
 });
