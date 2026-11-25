@@ -225,3 +225,8 @@ const UPSTREAM_INTERVAL = 1500;
 5. **Error Handling**: Always try-catch async operations, log with context
 6. **OSM Compliance**: Include User-Agent header, respect rate limits
 7. **Logging**: Use `[ServiceName]` prefix for traceability
+
+## 跨项目接口切换与 App 升级
+
+- 破坏性接口变更按 [Nominatim Cache 地点反查迁移说明](docs/deploy/map-gateway-place-migration.md) 核对调用方和升级门禁。涉及客户端发布时，先向用户报告受影响 App、最低构建号、下载入口和建议／强制升级开启时点。
+- 升级包和覆盖安装通过后才提高门槛。对于只有用户本人使用的测试客户端，用户确认手动升级后可停用旧入口。

@@ -8,7 +8,7 @@ Go 服务在 `backend/`，原生管理页面继续使用 `frontend/`。MariaDB �
 
 SQL 迁移单独运行。旧 SQLite 在线快照通过迁移命令导入专用空库。旧缓存键、计数、快照时间和原始响应保留。只允许旧程序读取明确声明兼容的新增迁移。执行中的迁移在 DDL 开始前登记，完成前服务拒绝启动。
 
-公开 API 与管理页面使用不同监听地址。冷查询有并发上限，交互请求优先尝试当前可用的上游，再在各源之间分配等待预算。只有上游明确返回无地点时，批次才标记 `no_result`。具体目录、验收和回滚见 [Raven 迁移计划](deploy/nominatim-cache-v2-raven.md)。
+公开 API 与管理页面使用不同监听地址。Raven 的 Nginx 仅将 `/nominatim/reverse`、`/nominatim/health`、`/nominatim/help` 交给本机 Nominatim Cache，与 MapGateway 的路由并列。`/help` 由 Go 服务提供，批量接口与管理入口保持私有。冷查询有并发上限，交互请求优先尝试当前可用的上游，再在各源之间分配等待预算。只有上游明确返回无地点时，批次才标记 `no_result`。具体目录、验收和回滚见 [Raven 迁移计划](deploy/nominatim-cache-v2-raven.md)。
 
 ## 一、项目概述
 

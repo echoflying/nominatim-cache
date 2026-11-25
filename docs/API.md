@@ -5,6 +5,8 @@
 | 端点 | 方法 | 认证 | 说明 |
 |------|------|------|------|
 | `/health` | GET | 否 | 健康检查 |
+| `/help` | GET | 否 | Go v2 接口指南 |
+| `/reverse` | GET | 否 | Go v2 单点反查，沿用 `/api/reverse` 的响应 |
 | `/api/reverse` | GET | 否 | 逆地理编码 |
 | `/api/reverse/batches` | POST | Bearer | 提交批量反查（Go v2） |
 | `/api/reverse/batches/{job_id}` | GET | Bearer | 查看批次状态（Go v2） |
@@ -42,9 +44,15 @@ curl -u admin:admin123 http://localhost:3000/admin/stats
 
 ## 三、接口详情
 
-Go v2 部署时可以在路径前加 `/nominatim`。`GET /health` 保留原有 `status`、`service`、`environment`、`timestamp` 和 `uptime`。新增 `version`、`commit` 和 `database_ready`。数据库无法访问时返回 503。
+### Raven 公网入口（Go v2）
 
-公开入口提供健康检查、单点和批量 API。管理页面及 `/admin/*` 由独立监听地址提供，通过受限入口访问。
+| 路径 | 用途 |
+| --- | --- |
+| `GET /nominatim/reverse?lat=30.28746&lon=120.16145` | 单点反查，返回 `place_name`、`place_quality`、`display_name` 和 `address` |
+| `GET /nominatim/health` | 就绪检查。JSON 含 `status`、`version`、`commit`、`database_ready`、`timestamp` 和 `uptime`。数据库不可用返回 503 |
+| `GET /nominatim/help` | JSON 接口指南，包含调用示例、字段说明、状态码与重试约定 |
+
+这三条路径通过 `https://x.zaitu.cn` 上的 Nginx 直接访问 Nominatim Cache，支持 CORS 和 `OPTIONS` 预检。公网单点接口另受 Nginx 按 IP 限流，429 附 `Retry-After`。批量 API 在授权环境访问。管理页面及 `/admin/*` 由独立监听地址提供。
 
 ### 批量逆地理编码（Go v2）
 
@@ -111,7 +119,7 @@ curl "http://localhost:3000/api/reverse?lat=30.28746&lon=120.16145&format=jsonv2
 
 管理端 `/admin/cache/list` 同时返回相同的地点名称、精度等级和来源字段，缓存列表显示“地址过粗”或“无有效名称”标记，便于发现历史及新入库的低质量结果。上游全失败时返回 HTTP 500，响应只包含 `error`。未命中查询达到并发上限时立即返回 HTTP 503，带 `Retry-After: 2`，缓存命中照常返回。
 
-旧域名 `nc.zaitu.cn` 直接反代同一个同步接口。由该域名收到的请求默认有 6.5 秒的查询预算，为已有 Altview 客户端的 8 秒读取超时预留余量。上游慢或拥堵时仍可能返回查询失败。批量查询通过任务接口处理。
+如果旧域名 `nc.zaitu.cn` 配置为直接反代 Go 同步接口，保留 `Host` 后默认使用 6.5 秒的查询预算。新客户端使用 Raven 公网入口，批量查询通过任务接口处理。
 ```json
 {
   "error": "所有上游 Nominatim 服务均不可用: <原因>"

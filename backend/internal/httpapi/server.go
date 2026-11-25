@@ -38,6 +38,8 @@ func (s Server) Handler() http.Handler {
 	s.cold = make(chan struct{}, max(1, s.Config.ColdLimit))
 	routes := http.NewServeMux()
 	routes.HandleFunc("GET /health", s.health)
+	routes.HandleFunc("GET /help", s.help)
+	routes.HandleFunc("GET /reverse", s.reverse)
 	routes.HandleFunc("GET /api/reverse", s.reverse)
 	routes.HandleFunc("POST /api/reverse/batches", s.batchAuth(s.submitBatch))
 	routes.HandleFunc("GET /api/reverse/batches/{id}", s.batchAuth(s.batchStatus))
@@ -54,8 +56,11 @@ func (s Server) Handler() http.Handler {
 	}
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		securityHeaders(w)
-		if r.URL.Path == "/api/reverse" || (s.Config.BasePath != "" && r.URL.Path == s.Config.BasePath+"/api/reverse") {
+		path := strings.TrimPrefix(r.URL.Path, s.Config.BasePath)
+		switch path {
+		case "/reverse", "/api/reverse", "/health", "/help":
 			w.Header().Set("Access-Control-Allow-Origin", "*")
+			w.Header().Set("Access-Control-Expose-Headers", "Retry-After")
 			if r.Method == http.MethodOptions {
 				w.Header().Set("Access-Control-Allow-Methods", "GET, HEAD, OPTIONS")
 				w.WriteHeader(http.StatusNoContent)
@@ -63,6 +68,42 @@ func (s Server) Handler() http.Handler {
 			}
 		}
 		mux.ServeHTTP(w, r)
+	})
+}
+
+func (s Server) help(w http.ResponseWriter, _ *http.Request) {
+	base := s.Config.BasePath
+	w.Header().Set("Cache-Control", "no-store")
+	writeJSON(w, http.StatusOK, jsonObject{
+		"service":     "nominatim-cache",
+		"description": "以经纬度反查地点。返回用于分组的短地名，也保留完整地址。",
+		"endpoints": []jsonObject{
+			{"method": "GET", "path": base + "/reverse", "description": "按坐标反查地名"},
+			{"method": "GET", "path": base + "/health", "description": "检查数据库就绪状态，并返回版本和提交"},
+			{"method": "GET", "path": base + "/help", "description": "读取本站接口指南"},
+		},
+		"example": base + "/reverse?lat=30.28746&lon=120.16145",
+		"parameters": map[string]string{
+			"lat": "必填，WGS84 纬度，范围 [-90, 90]",
+			"lon": "必填，WGS84 经度，范围 [-180, 180]",
+		},
+		"response_fields": map[string]string{
+			"place_name":    "用于展示或分组的短地名。质量为 precise 或 regional 且非空时使用。",
+			"place_quality": "precise 精确、regional 区域、coarse 过粗、none 无有效名称。过粗或无名称仍可返回 HTTP 200。",
+			"display_name":  "完整地址，可用于详情展示。",
+			"address":       "上游提供的结构化地址。",
+			"cached":        "命中服务端缓存时为 true。",
+		},
+		"status_codes": map[string]string{
+			"200": "查询完成。没有合适的短地名时 place_name 可为空。",
+			"400": "坐标无效。",
+			"429": "公网入口限流。按 Retry-After 退避。",
+			"500": "查询失败，可延后再试。",
+			"502": "公网入口暂时无法连接反查服务。",
+			"503": "反查繁忙或数据库未就绪。存在 Retry-After 时按其退避。",
+			"504": "公网入口等待反查结果超时。",
+		},
+		"access": "公开接口免认证，支持浏览器跨域。批量和管理接口通过受限入口访问。",
 	})
 }
 

@@ -1,16 +1,17 @@
 # Raven 首次部署执行单
 
-2026-11-25 只读盘点确认 `x.zaitu.cn` 指向 Raven，旧 `nc.zaitu.cn` 指向 Zion。本次确定从空库上线，旧站现有缓存、访问日志和累计统计都从零重新生成。两个域名切换到新版后共用一套数据。
+2026-11-25 只读盘点确认 `x.zaitu.cn` 指向 Raven，旧 `nc.zaitu.cn` 指向 Zion。Raven 新实例先从空库启动，随后导入用户提供的旧站 SQLite 快照。公开入口、客户端和升级门禁按 [Nominatim Cache 地点反查迁移说明](map-gateway-place-migration.md) 切换。
 
 | 项目 | 部署值 |
 | --- | --- |
 | 主机 | SSH 别名 `raven`，Rocky Linux x86_64 |
-| 公开 API | `127.0.0.1:18197` → `https://x.zaitu.cn/nominatim/` |
+| 地点反查 | `https://x.zaitu.cn/nominatim/reverse` → `127.0.0.1:18197/nominatim/reverse` |
+| 健康与指南 | `/nominatim/health`、`/nominatim/help` → `127.0.0.1:18197` 同路径 |
 | 管理入口 | `127.0.0.1:18198`，通过 SSH 转发访问 |
 | 现有端口 | `8097` 是 Ops Gateway，`8098` 是 TeamVoice |
 | MariaDB | 项目独立进程，只监听 Unix socket `/run/nominatim-cache-db/mariadb.sock` |
 | 存储 | `/mnt/datadisk0/nominatim-cache/`，分开存软件、数据库和备份 |
-| Nginx | 在现有 `/etc/nginx/conf.d/x-zaitu.conf` 的 HTTPS server 内引入路由片段 |
+| Nginx | 在 `http` 加 `nominatim-rate.conf`，并在 `x.zaitu.cn` HTTPS 虚拟主机加 `nominatim-location.conf` |
 
 部署前复查端口与目录。管理页面使用本机 SSH 隧道。独立 MariaDB 使用 Raven 现有 **11.4.13 软件目录的副本**，由单独的 Unix 账号和数据库配置管理。正式库名为 `nominatim_cache`，演练库使用单独的名称，分开创建账号。
 
@@ -30,9 +31,11 @@ sudo bash install-raven-fresh.sh \
 
 2026-11-25 21:04（北京时间）已在 Raven 完成这一阶段。`v2.0.0-rc.1`（`22bd565`）与隔离的 MariaDB 11.4.13 均在运行，两个 unit 暂为 disabled。`/nominatim/health` 返回 `database_ready: true`，缓存、访问日志与累计请求均为零。两个监听均为回环地址。管理 API 在公开监听的检查结果为 404，在管理监听的未鉴权检查结果为 401。
 
+2026-11-25 21:21（北京时间）将 `tmp/data.zip` 内的 SQLite 主库和 WAL 合成独立快照，快照完整性检查通过。使用 `nc-migrate` 导入尚为空的 Raven 项目库，源和目标内容摘要一致。MariaDB 实查为缓存 **2,122** 条、访问日志 **9,548** 条、累计请求 **27,819** 次。导入后新版重启并通过回环健康检查。回执存放于 Raven 的 `/mnt/datadisk0/nominatim-cache/backups/legacy-import-31921ff4.json`，公共入口尚未切换。
+
 ### 旧站备份方法
 
-本次启用空库路径。以下方法保留供以后需要迁移旧数据时使用。
+以下方法用于从仍在运行的旧版本制作独立快照。若已经拿到含 WAL 的归档，先用临时工作目录合成独立快照，再导入。
 
 先核对 Zion 的反代目标。若 Node 运行在另一台机器，在实际应用主机定位进程、工作目录、容器挂载或 `DATABASE_PATH`。确认正在写入的 SQLite 文件后，用同一个旧站运行账号执行在线备份：
 
@@ -68,9 +71,9 @@ python3 backup-legacy-sqlite.py \
 1. 上传 RC 归档与外部 SHA-256 文件，依次运行 `sha256sum -c <归档>.sha256`，解包，再在解包目录运行 `sha256sum -c SHA256SUMS`。给每次构建保留独立 `releases/<version>`，配置和数据不随解包覆盖。
 2. 先通过回环访问，检查 `/health` 的版本、完整 commit 和数据库就绪状态。发布验收时用一个允许查询的坐标验证首次回源和第二次缓存命中。批量鉴权和冷批量上游在约定的试用阶段再启用。
 3. 管理页通过 `ssh -N -L 18198:127.0.0.1:18198 raven`，访问本机 `http://127.0.0.1:18198/`。公开入口的 `/nominatim/admin/stats` 应返回 404。
-4. 切换前确认旧域名 TLS 和代理方案。在 `x.zaitu.cn` 加 Nginx include，运行 `nginx -t`，通过后重载并验证。保留旧 Node 作为切换前的回退入口。
-5. 让旧域名直接转发到新版，保留原请求路径和查询参数。若 DNS 迁到 Raven，先准备旧域名证书和独立虚拟主机。DNS 传播期间，Zion 只转发到新服务，避免旧缓存库重新接收写入。用真实 Altview 测一次旧域名，确认状态码、短地名和 8 秒读取窗口。验收通过后再退役旧 Node。
+4. 发布含 `/reverse` 和 `/help` 的 Go 版本，验收回环探针后加 Nginx 规则。以 `nginx -t` 通过为重载条件。验证三个公网接口、CORS、后台／批量隔离和现有 MapGateway 路由。把已验收入口交给各客户端联调。启用 NC 服务和项目数据库的开机启动，核对两个回环监听。
+5. 用户自行更新并确认测试客户端可用后，定位实际运行旧 Node 的主机和旧域名转发配置，停用旧 Node 与其自启动，并撤下旧站转发规则。旧库、归档和程序保留到切换验收结束。若旧站有必须保留的新增数据，停写后先取得最终快照，再决定是否补迁。
 
 ## 4. 回退
 
-首次切换前若验收失败，流量仍由旧入口处理。首次切换后需要回退时，先停止新版写入和批次提交，单独备份 MariaDB。若希望保留 Go 期间新增的缓存，可用 `nc-migrate export-sqlite -output <新文件>` 生成旧 Node 可读的快照，抽验通过后再恢复流量。
+首次切换前若验收失败，旧客户端可继续使用旧入口。若切换后出现问题，优先把升级门禁切回 `off`，再回退 Nginx 规则或 NC 的兼容版本。若必须临时恢复旧 Node 并保留 Go 期间新增缓存，先停止新版写入和批次提交并单独备份 MariaDB，再用 `nc-migrate export-sqlite -output <新文件>` 生成旧 Node 可读的快照，抽验通过后恢复旧出口及相应客户端。

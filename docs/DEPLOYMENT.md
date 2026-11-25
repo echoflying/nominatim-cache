@@ -13,7 +13,9 @@ Raven 首次部署所用的实际端口、数据库和切换步骤见 [Raven 部
 
 公开 API 默认监听 `127.0.0.1:3000`，路径前缀用 `BASE_PATH` 指定。管理页面和管理 API 默认监听 `127.0.0.1:3001`，用 `ADMIN_LISTEN_ADDR` 配置独立回环地址，用 `FRONTEND_DIR` 指定静态资源目录。生产用独立的私有 HTTPS 管理入口，并设置非默认管理账号与密码。管理凭据只保留在当前页面内存，旧存储键会清理，首次发布时轮换旧凭据。
 
-生产必须通过 `NOMINATIM_PRIMARY`、`NOMINATIM_BACKUP_1`、`NOMINATIM_BACKUP_2` 至少配置一个交互上游。`REVERSE_COLD_LIMIT` 默认允许 16 个未命中的同步请求同时进入查询流程。`LEGACY_HOST` 默认是 `nc.zaitu.cn`，`LEGACY_TIMEOUT_MS` 默认 6500，范围 1000 至 7000 毫秒。旧域名使用随包的直接反代片段，保留原来的地址和 Host，供现有 Altview 调用。发布验收应同时检查健康、冷查询、缓存命中、旧域名路径和公开入口对管理路由的隔离。
+Raven 使用 `BASE_PATH=/nominatim`。在 Nginx `http` 块引入 `deploy/raven/nominatim-rate.conf`，在 `x.zaitu.cn` 的 HTTPS `server` 块引入 `deploy/raven/nominatim-location.conf`。运行 `nginx -t` 再重载。公网只接入 `/reverse`、`/health` 和 `/help` 三个 API，路径均带 `/nominatim` 前缀。
+
+生产必须通过 `NOMINATIM_PRIMARY`、`NOMINATIM_BACKUP_1`、`NOMINATIM_BACKUP_2` 至少配置一个交互上游。`REVERSE_COLD_LIMIT` 默认允许 16 个未命中的同步请求同时进入查询流程。`LEGACY_HOST` 默认是 `nc.zaitu.cn`，`LEGACY_TIMEOUT_MS` 默认 6500，范围 1000 至 7000 毫秒。两项仅在旧域名转给 Go 时使用。发布验收检查接口指南、健康、冷查询、缓存命中、CORS 及公开入口对批量和管理路由的隔离。
 
 用 `BATCH_TOKENS` 配置具有独立身份的试用调用方，格式为 `caller=token,other=token`。另用 `NOMINATIM_BATCH_URL` 配置获准批量使用的自建或签约源。缺省只允许批量命中缓存。公共上游的用量及政策见 [批量设计](deploy/nominatim-cache-v2-raven.md#3-批量接口与队列)。
 
