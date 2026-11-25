@@ -3,8 +3,9 @@
  */
 
 class NominatimAPI {
-  constructor(baseUrl = '') {
+  constructor(baseUrl = '', useOpsSession = false) {
     this.baseUrl = baseUrl;
+    this.useOpsSession = useOpsSession;
     this.credentials = null;
     this.authPromptMessage = '请输入管理后台账号和密码';
     this.lastCredentialSource = 'none';
@@ -169,6 +170,9 @@ class NominatimAPI {
    * 获取认证头
    */
   async authenticatedFetch(url, options = {}, allowRetry = true) {
+    if (this.useOpsSession) {
+      return fetch(url, options);
+    }
     const authHeaders = this.getAuthHeaders();
     const credentialSource = this.lastCredentialSource;
     const response = await fetch(url, {
@@ -234,4 +238,5 @@ try {
   // 浏览器禁用存储时仍可使用当前页面。
 }
 const baseUrl = globalThis.location ? new URL('./', globalThis.location.href).href.replace(/\/$/, '') : '';
-const api = new NominatimAPI(baseUrl);
+const useOpsSession = globalThis.location?.pathname.startsWith('/ops/nominatim/') ?? false;
+const api = new NominatimAPI(baseUrl, useOpsSession);

@@ -7,7 +7,7 @@
 | 主机 | SSH 别名 `raven`，Rocky Linux x86_64 |
 | 地点反查 | `https://x.zaitu.cn/nominatim/reverse` → `127.0.0.1:18197/nominatim/reverse` |
 | 健康与指南 | `/nominatim/health`、`/nominatim/help` → `127.0.0.1:18197` 同路径 |
-| 管理入口 | `127.0.0.1:18198`，通过 SSH 转发访问 |
+| 管理入口 | `https://x.zaitu.cn/ops/nominatim/`，通过 OPS 授权后转发至 `127.0.0.1:18198` |
 | 现有端口 | `8097` 是 Ops Gateway，`8098` 是 TeamVoice |
 | MariaDB | 项目独立进程，只监听 Unix socket `/run/nominatim-cache-db/mariadb.sock` |
 | 存储 | `/mnt/datadisk0/nominatim-cache/`，分开存软件、数据库和备份 |
@@ -72,7 +72,7 @@ python3 backup-legacy-sqlite.py \
 
 1. 上传 RC 归档与外部 SHA-256 文件，依次运行 `sha256sum -c <归档>.sha256`，解包，再在解包目录运行 `sha256sum -c SHA256SUMS`。给每次构建保留独立 `releases/<version>`，配置和数据不随解包覆盖。
 2. 先通过回环访问，检查 `/health` 的版本、完整 commit 和数据库就绪状态。发布验收时用一个允许查询的坐标验证首次回源和第二次缓存命中。批量鉴权和冷批量上游在约定的试用阶段再启用。
-3. 管理页通过 `ssh -N -L 18198:127.0.0.1:18198 raven`，访问本机 `http://127.0.0.1:18198/`。公开入口的 `/nominatim/admin/stats` 应返回 404。
+3. 管理页从 `/ops/nominatim/` 登录 OPS。SSH 备用路径可执行 `ssh -N -L 18198:127.0.0.1:18198 raven`，再打开本机 `http://127.0.0.1:18198/`。公开入口的 `/nominatim/admin/stats` 应返回 404。
 4. 发布含 `/reverse` 和 `/help` 的 Go 版本，验收回环探针后加 Nginx 规则。以 `nginx -t` 通过为重载条件。验证三个公网接口、CORS、后台／批量隔离和现有 MapGateway 路由。把已验收入口交给各客户端联调。启用 NC 服务和项目数据库的开机启动，核对两个回环监听。
 5. 用户自行更新并确认测试客户端可用后，定位实际运行旧 Node 的主机和旧域名转发配置，停用旧 Node 与其自启动，并撤下旧站转发规则。旧库、归档和程序保留到切换验收结束。若旧站有必须保留的新增数据，停写后先取得最终快照，再决定是否补迁。
 

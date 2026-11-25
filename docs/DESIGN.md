@@ -10,6 +10,8 @@ SQL 迁移单独运行。旧 SQLite 在线快照通过迁移命令导入专用�
 
 公开 API 与管理页面使用不同监听地址。Raven 的 Nginx 仅将 `/nominatim/reverse`、`/nominatim/health`、`/nominatim/help` 交给本机 Nominatim Cache，与 MapGateway 的路由并列。`/help` 由 Go 服务提供，批量接口与管理入口保持私有。冷查询有并发上限，交互请求优先尝试当前可用的上游，再在各源之间分配等待预算。只有上游明确返回无地点时，批次才标记 `no_result`。具体目录、验收和回滚见 [Raven 迁移计划](deploy/nominatim-cache-v2-raven.md)。
 
+浏览器通过 `/ops/nominatim/` 访问管理后台。Nginx 用共享 OPS `auth_request` 校验会话、项目权限和写操作来源，再去掉路径前缀并在服务端使用 Nominatim 的管理凭据访问回环端口。浏览器只使用 OPS Cookie，Cookie 不传给 Nominatim。管理界面用相对路径加载静态文件和 API。SSH 隧道保留独立的 Basic Auth 登录。
+
 ## 一、项目概述
 
 ### 1.1 项目背景

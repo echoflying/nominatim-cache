@@ -52,7 +52,7 @@ curl -u admin:admin123 http://localhost:3000/admin/stats
 | `GET /nominatim/health` | 就绪检查。JSON 含 `status`、`version`、`commit`、`database_ready`、`timestamp` 和 `uptime`。数据库不可用返回 503 |
 | `GET /nominatim/help` | JSON 接口指南，包含调用示例、字段说明、状态码与重试约定 |
 
-这三条路径通过 `https://x.zaitu.cn` 上的 Nginx 直接访问 Nominatim Cache，支持 CORS 和 `OPTIONS` 预检。公网单点接口另受 Nginx 按 IP 限流，429 附 `Retry-After`。批量 API 在授权环境访问。管理页面及 `/admin/*` 由独立监听地址提供。
+这三条路径通过 `https://x.zaitu.cn` 上的 Nginx 直接访问 Nominatim Cache，支持 CORS 和 `OPTIONS` 预检。公网单点接口另受 Nginx 按 IP 限流，429 附 `Retry-After`。批量 API 在授权环境访问。Raven 的管理页面和同源管理接口通过 `/ops/nominatim/` 提供，由 OPS 校验会话及 `nominatim.access`。独立管理监听仍可通过 SSH 隧道使用 Basic Auth。
 
 ### 批量逆地理编码（Go v2）
 
