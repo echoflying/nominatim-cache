@@ -33,6 +33,8 @@ sudo bash install-raven-fresh.sh \
 
 2026-11-25 21:21（北京时间）将 `tmp/data.zip` 内的 SQLite 主库和 WAL 合成独立快照，快照完整性检查通过。使用 `nc-migrate` 导入尚为空的 Raven 项目库，源和目标内容摘要一致。MariaDB 实查为缓存 **2,122** 条、访问日志 **9,548** 条、累计请求 **27,819** 次。导入后新版重启并通过回环健康检查。回执存放于 Raven 的 `/mnt/datadisk0/nominatim-cache/backups/legacy-import-31921ff4.json`，公共入口尚未切换。
 
+2026-11-25 23:06（北京时间）发布 `v2.0.0-rc.2`（`128078b`）。Nginx 直接开放 `/nominatim/reverse`、`/nominatim/health` 和 `/nominatim/help`。验证了 HTTPS、首次回源及再次命中、CORS 预检、无效坐标 400、限流 429 和 `Retry-After: 2`、后台及批量路径 404，以及现有 MapGateway 的 `/help`。两个 Nominatim unit 均已启用开机启动。发布前的 Nginx 虚拟主机备份为 `/etc/nginx/snippets/x-zaitu-before-nominatim.PJlhNEe3`。
+
 ### 旧站备份方法
 
 以下方法用于从仍在运行的旧版本制作独立快照。若已经拿到含 WAL 的归档，先用临时工作目录合成独立快照，再导入。
