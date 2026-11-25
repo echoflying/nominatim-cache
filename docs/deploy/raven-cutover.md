@@ -35,6 +35,8 @@ sudo bash install-raven-fresh.sh \
 
 2026-11-25 23:06（北京时间）发布 `v2.0.0-rc.2`（`128078b`）。Nginx 直接开放 `/nominatim/reverse`、`/nominatim/health` 和 `/nominatim/help`。验证了 HTTPS、首次回源及再次命中、CORS 预检、无效坐标 400、限流 429 和 `Retry-After: 2`、后台及批量路径 404，以及现有 MapGateway 的 `/help`。两个 Nominatim unit 均已启用开机启动。发布前的 Nginx 虚拟主机备份为 `/etc/nginx/snippets/x-zaitu-before-nominatim.PJlhNEe3`。
 
+2026-11-26（北京时间）上线 Nominatim `v2.0.0-rc.3`（`4807423`）和 OPS `0.3.24.945aa94`（Raven 仓库 `codex/nominatim-ops`）。`/ops/nominatim/` 接入 OPS 会话，`nominatim.access` 初始授予现有超级管理员。实测登录后显示项目入口，缓存列表及统计返回 200，无权限返回 403，跨站写入返回 403。临时验证账号和会话已撤销。公网业务前缀 `/nominatim/admin/` 实测为 404。此次发布的 Nginx 虚拟主机备份为 `/etc/nginx/snippets/x-zaitu-before-nominatim-ops.z324pmF5`，OPS 用户配置备份为 `/etc/ops/users-before-nominatim.huw5t31B`，均限 root 读取。
+
 ### 旧站备份方法
 
 以下方法用于从仍在运行的旧版本制作独立快照。若已经拿到含 WAL 的归档，先用临时工作目录合成独立快照，再导入。
