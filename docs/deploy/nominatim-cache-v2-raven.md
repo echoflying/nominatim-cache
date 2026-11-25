@@ -1,6 +1,8 @@
 # Nominatim Cache v2 重写与 Raven 迁移计划
 
-在现有仓库内用 Go + MariaDB 接替 Node.js + SQLite，把旧站缓存、访问记录和统计迁到 Raven，并给 Altview 等调用方提供异步批量反查。新入口拟用 `https://x.zaitu.cn/nominatim/`。先用旧站备份演练，再迁移正式库和切换流量。
+在现有仓库内用 Go + MariaDB 接替 Node.js + SQLite，并给 Altview 等调用方提供异步批量反查。新入口拟用 `https://x.zaitu.cn/nominatim/`，先验收 Raven 上的新服务，再切换流量。
+
+2026-11-25 部署决定采用空库，省略旧 SQLite 的备份、导入和最终快照。以下迁移步骤保留为可选方案。本次以 [Raven 部署执行单](raven-cutover.md) 为准。
 
 ## 1. 本地目录与仓库
 

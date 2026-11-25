@@ -1,1 +1,2 @@
 scripts/build-raven.sh text eol=lf
+scripts/install-raven-fresh.sh text eol=lf
