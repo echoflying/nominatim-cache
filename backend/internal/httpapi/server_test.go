@@ -26,12 +26,18 @@ func TestPlaceHelpAdvertisesPublicPaths(t *testing.T) {
 	if err := json.NewDecoder(help.Body).Decode(&guide); err != nil {
 		t.Fatal(err)
 	}
-	wanted := map[string]bool{"/nominatim/reverse": true, "/nominatim/health": true, "/nominatim/help": true}
+	wanted := map[string]bool{
+		"GET /nominatim/reverse": true, "GET /nominatim/health": true, "GET /nominatim/help": true,
+		"POST /nominatim/altview/place-batches":                 true,
+		"GET /nominatim/altview/place-batches/{job_id}":         true,
+		"GET /nominatim/altview/place-batches/{job_id}/results": true,
+	}
 	for _, endpoint := range guide.Endpoints {
-		if endpoint.Method != http.MethodGet || !wanted[endpoint.Path] {
+		key := endpoint.Method + " " + endpoint.Path
+		if !wanted[key] {
 			t.Errorf("unexpected public endpoint: %v", endpoint)
 		}
-		delete(wanted, endpoint.Path)
+		delete(wanted, key)
 		preflight := httptest.NewRecorder()
 		handler.ServeHTTP(preflight, httptest.NewRequest(http.MethodOptions, endpoint.Path, nil))
 		if preflight.Code != http.StatusNoContent || preflight.Header().Get("Access-Control-Allow-Origin") != "*" {

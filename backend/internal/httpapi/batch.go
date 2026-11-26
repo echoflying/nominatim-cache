@@ -10,7 +10,9 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"strconv"
 	"strings"
+	"time"
 	"unicode"
 
 	"github.com/echoflying/nominatim-cache/backend/internal/geocode"
@@ -156,6 +158,62 @@ func (s Server) batchResults(w http.ResponseWriter, r *http.Request, caller stri
 	if !ok {
 		return
 	}
+	if value, exists := r.URL.Query()["cursor"]; exists {
+		if len(value) != 1 || value[0] == "" {
+			fail(w, http.StatusBadRequest, "cursor must be a non-negative integer")
+			return
+		}
+		cursor, err := strconv.ParseInt(value[0], 10, 64)
+		if err != nil || cursor < 0 {
+			fail(w, http.StatusBadRequest, "cursor must be a non-negative integer")
+			return
+		}
+		limit, err := parseBoundedInt(r.URL.Query().Get("limit"), 50, 1, 50)
+		if err != nil {
+			fail(w, http.StatusBadRequest, "limit must be between 1 and 50")
+			return
+		}
+		wait, err := parseBoundedInt(r.URL.Query().Get("wait"), 0, 0, 10)
+		if err != nil {
+			fail(w, http.StatusBadRequest, "wait must be between 0 and 10 seconds")
+			return
+		}
+		deadline := time.Now().Add(time.Duration(wait) * time.Second)
+		for {
+			items, err := s.Store.BatchItemsAfter(r.Context(), caller, batch.ID, cursor, limit)
+			if err != nil {
+				batchError(w, err)
+				return
+			}
+			if len(items.Items) > 0 || items.HasMore || batch.Pending == 0 || time.Now().After(deadline) {
+				current, err := s.Store.Batch(r.Context(), caller, batch.ID)
+				if err != nil {
+					batchError(w, err)
+					return
+				}
+				writeJSON(w, http.StatusOK, struct {
+					batchLinks
+					Cursor     int64             `json:"cursor"`
+					NextCursor int64             `json:"next_cursor"`
+					HasMore    bool              `json:"has_more"`
+					Items      []store.BatchItem `json:"items"`
+				}{links(r, current), cursor, items.NextCursor, items.HasMore, items.Items})
+				return
+			}
+			timer := time.NewTimer(250 * time.Millisecond)
+			select {
+			case <-r.Context().Done():
+				timer.Stop()
+				return
+			case <-timer.C:
+			}
+			batch, err = s.Store.Batch(r.Context(), caller, batch.ID)
+			if err != nil {
+				batchError(w, err)
+				return
+			}
+		}
+	}
 	page, limit, offset := pagination(r, 100, 500)
 	items, err := s.Store.BatchItems(r.Context(), caller, batch.ID, limit, offset)
 	if err != nil {
@@ -169,6 +227,17 @@ func (s Server) batchResults(w http.ResponseWriter, r *http.Request, caller stri
 		HasMore bool              `json:"has_more"`
 		Items   []store.BatchItem `json:"items"`
 	}{links(r, batch), page, limit, offset+limit < batch.Total, items})
+}
+
+func parseBoundedInt(value string, fallback, minValue, maxValue int) (int, error) {
+	if value == "" {
+		return fallback, nil
+	}
+	parsed, err := strconv.Atoi(value)
+	if err != nil || parsed < minValue || parsed > maxValue {
+		return 0, errors.New("out of range")
+	}
+	return parsed, nil
 }
 
 func batchError(w http.ResponseWriter, err error) {

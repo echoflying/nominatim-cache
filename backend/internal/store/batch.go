@@ -68,6 +68,10 @@ func (s Store) SubmitBatch(ctx context.Context, caller, requestKey, hash string,
 			byKey[key] = p
 		}
 	}
+	priority := geocode.PriorityBatch
+	if len(byKey) < 10 {
+		priority = geocode.PrioritySmallBatch
+	}
 	cached, err := batchCache(ctx, tx, byKey)
 	if err != nil {
 		return "", err
@@ -96,8 +100,8 @@ func (s Store) SubmitBatch(ctx context.Context, caller, requestKey, hash string,
 		finished = &now
 	}
 	id = randomID()
-	if _, err := tx.ExecContext(ctx, "INSERT INTO batch_jobs (id,caller,request_key,input_hash,created_at,finished_at) VALUES (?,?,?,?,?,?)",
-		id, caller, requestKey, hash, now, finished); err != nil {
+	if _, err := tx.ExecContext(ctx, "INSERT INTO batch_jobs (id,caller,request_key,input_hash,created_at,finished_at,priority) VALUES (?,?,?,?,?,?,?)",
+		id, caller, requestKey, hash, now, finished, priority); err != nil {
 		return "", err
 	}
 	if pending > 0 {
@@ -108,9 +112,10 @@ func (s Store) SubmitBatch(ctx context.Context, caller, requestKey, hash string,
 			}
 		}
 		slices.Sort(ordered)
-		if _, err := tx.ExecContext(ctx, "INSERT INTO geocode_tasks (cache_key,lat,lon,next_at) VALUES "+
-			strings.Join(slices.Repeat([]string{"(?,?,?,?)"}, len(ordered)), ",")+" ON DUPLICATE KEY UPDATE cache_key=VALUES(cache_key)",
-			taskArgs(ordered, byKey, now)...); err != nil {
+		if _, err := tx.ExecContext(ctx, "INSERT INTO geocode_tasks (cache_key,lat,lon,next_at,priority,enqueued_at) VALUES "+
+			strings.Join(slices.Repeat([]string{"(?,?,?,?,?,?)"}, len(ordered)), ",")+
+			" ON DUPLICATE KEY UPDATE priority=LEAST(priority,VALUES(priority))",
+			taskArgs(ordered, byKey, now, priority)...); err != nil {
 			return "", err
 		}
 	}
@@ -130,14 +135,18 @@ func (s Store) SubmitBatch(ctx context.Context, caller, requestKey, hash string,
 		strings.Join(slices.Repeat([]string{"(?,?,?,?,?,?,?,?)"}, len(points)), ","), args...); err != nil {
 		return "", err
 	}
+	if _, err := tx.ExecContext(ctx, `INSERT IGNORE INTO batch_result_events (job_id,ordinal)
+		SELECT job_id,ordinal FROM batch_items WHERE job_id=? AND status<>'pending' ORDER BY ordinal`, id); err != nil {
+		return "", err
+	}
 	return id, tx.Commit()
 }
 
-func taskArgs(keys []string, points map[string]geocode.Point, now int64) []any {
-	args := make([]any, 0, 4*len(keys))
+func taskArgs(keys []string, points map[string]geocode.Point, now int64, priority geocode.RequestPriority) []any {
+	args := make([]any, 0, 6*len(keys))
 	for _, key := range keys {
 		p := points[key]
-		args = append(args, key, p.Lat, p.Lon, now)
+		args = append(args, key, p.Lat, p.Lon, now, priority, now)
 	}
 	return args
 }
@@ -241,10 +250,45 @@ func (s Store) BatchItems(ctx context.Context, caller, id string, limit, offset 
 	return result, rows.Err()
 }
 
+type CursorBatchItems struct {
+	Items      []BatchItem
+	NextCursor int64
+	HasMore    bool
+}
+
+func (s Store) BatchItemsAfter(ctx context.Context, caller, id string, cursor int64, limit int) (CursorBatchItems, error) {
+	result := CursorBatchItems{Items: make([]BatchItem, 0), NextCursor: cursor}
+	rows, err := s.DB.QueryContext(ctx, `SELECT e.event_id,i.ordinal,i.lat,i.lon,i.status,i.result,i.last_error
+		FROM batch_result_events e
+		JOIN batch_jobs j ON j.id=e.job_id
+		JOIN batch_items i ON i.job_id=e.job_id AND i.ordinal=e.ordinal
+		WHERE e.job_id=? AND j.caller=? AND e.event_id>?
+		ORDER BY e.event_id LIMIT ?`, id, caller, cursor, limit+1)
+	if err != nil {
+		return result, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var item BatchItem
+		var eventID int64
+		if err := rows.Scan(&eventID, &item.Index, &item.Lat, &item.Lon, &item.Status, &item.Result, &item.Error); err != nil {
+			return result, err
+		}
+		if len(result.Items) == limit {
+			result.HasMore = true
+			break
+		}
+		result.Items = append(result.Items, item)
+		result.NextCursor = eventID
+	}
+	return result, rows.Err()
+}
+
 type Task struct {
 	Key      string
 	Point    geocode.Point
 	Attempts int
+	Priority geocode.RequestPriority
 	Token    string
 }
 
@@ -256,8 +300,11 @@ func (s Store) Claim(ctx context.Context, lease time.Duration) (Task, error) {
 	defer tx.Rollback()
 	var task Task
 	now := time.Now()
-	err = tx.QueryRowContext(ctx, "SELECT cache_key,lat,lon,attempts FROM geocode_tasks WHERE next_at<=? AND (lease_until IS NULL OR lease_until<=?) ORDER BY next_at,cache_key LIMIT 1 FOR UPDATE",
-		now.UnixMilli(), now.UnixMilli()).Scan(&task.Key, &task.Point.Lat, &task.Point.Lon, &task.Attempts)
+	err = tx.QueryRowContext(ctx, `SELECT cache_key,lat,lon,attempts,priority FROM geocode_tasks
+		WHERE next_at<=? AND (lease_until IS NULL OR lease_until<=?)
+		ORDER BY GREATEST(0,CAST(priority AS SIGNED)-FLOOR((?-enqueued_at)/120000)),next_at,enqueued_at,cache_key
+		LIMIT 1 FOR UPDATE SKIP LOCKED`, now.UnixMilli(), now.UnixMilli(), now.UnixMilli()).
+		Scan(&task.Key, &task.Point.Lat, &task.Point.Lon, &task.Attempts, &task.Priority)
 	if err != nil {
 		return Task{}, err
 	}
@@ -324,6 +371,10 @@ func (s Store) Finish(ctx context.Context, task Task, status, reason string, res
 	}
 	if _, err := tx.ExecContext(ctx, "UPDATE batch_items SET status=?,result=?,last_error=? WHERE cache_key=? AND status='pending'",
 		status, raw, lastError, task.Key); err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, `INSERT IGNORE INTO batch_result_events (job_id,ordinal)
+		SELECT job_id,ordinal FROM batch_items WHERE cache_key=? AND status=?`, task.Key, status); err != nil {
 		return err
 	}
 	const completed = `UPDATE batch_jobs j

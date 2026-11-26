@@ -136,7 +136,7 @@ func TestArchivesRejectedAndAcceptedUpstreamAttempts(t *testing.T) {
 	}
 }
 
-func TestReverseUsesReadyBackupWhenFirstSourceIsBusy(t *testing.T) {
+func TestReverseUsesReadyBackupWhenFirstSourceIsCoolingDown(t *testing.T) {
 	upstream, err := NewUpstream([]SourceConfig{
 		{Name: "busy", URL: "https://busy.example.test/reverse"},
 		{Name: "ready", URL: "https://ready.example.test/reverse"},
@@ -144,8 +144,7 @@ func TestReverseUsesReadyBackupWhenFirstSourceIsBusy(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	upstream.sources[0].gate.busy <- struct{}{}
-	defer func() { <-upstream.sources[0].gate.busy }()
+	upstream.sources[0].gate.until = time.Now().Add(time.Second)
 	upstream.client.Transport = roundTrip(func(r *http.Request) (*http.Response, error) {
 		return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(`{"display_name":"备用源"}`))}, nil
 	})

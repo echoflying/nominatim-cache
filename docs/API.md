@@ -62,15 +62,43 @@ curl -u admin:admin123 http://localhost:3000/admin/stats
 
 使用 `Authorization: Bearer <token>`。提交请求需要 `Idempotency-Key`（1 至 128 字节）。同一个调用方、同一个键且坐标列表相同时返回已有任务。键相同但请求内容不同时返回 409。
 
+调度按请求规模划分优先级：单点反查优先级最高；去重后少于 10 个坐标的批次为小批量优先级；其他批次按普通队列处理。所有类别仍共用每个上游的并发闸门和请求间隔。等待较久的批量任务会逐步提升优先级，避免持续的小请求使大任务一直等待。优先级只影响等待顺序，不增加上游速率。
+
 提交示例为 `POST /api/reverse/batches`，请求体为 `{"points":[{"lat":30.28746,"lon":120.16145}]}`，默认接受 1 至 500 个点。返回 202 和 `Location` 头，正文包括 `job_id`、`status`、`total`、`pending`、`completed`、`failed`、`status_url` 和 `results_url`。状态为 `pending`、`running`、`completed` 或 `completed_with_errors`。待处理额度不足返回 429，并提供 `Retry-After`。
 
-用状态接口轮询，建议两次查询间隔至少 2 秒。结果接口接受 `page`、`limit`（默认 100，最大 500），按提交顺序返回 `items`，每项含从 0 开始的 `index`、`lat`、`lon` 及 `status`。已完成项携带 `result`。暂时失败项可能携带 `error`、`retry_at`，错误结束项携带 `error`。结果状态为 `cached`、`resolved`、`pending`、`running`、`no_result` 或 `failed`。服务保留完成的任务 7 天。过期或属于其他调用方的任务返回 404。
+用状态接口轮询，建议两次查询间隔至少 2 秒。兼容分页方式接受 `page`、`limit`（默认 100，最大 500），按提交顺序返回 `items`，每项含从 0 开始的 `index`、`lat`、`lon` 及 `status`。已完成项携带 `result`。暂时失败项可能携带 `error`、`retry_at`，错误结束项携带 `error`。结果状态为 `cached`、`resolved`、`pending`、`running`、`no_result` 或 `failed`。
+
+增量结果方式使用 `cursor`，可选 `limit` 为 1 至 50，默认 50，可选 `wait` 为 0 至 10 秒。服务最多等待 `wait` 秒，并返回这段时间内已完成的 `items`、`next_cursor` 和 `has_more`。首次传 `cursor=0`，随后原样传回响应里的 `next_cursor`；游标是服务端的递增位置标记，不是已收结果条数。每条已完成结果只需读取一次。增量结果按完成顺序返回，`index` 保留原提交位置。完成任务保留 7 天。过期或属于其他调用方的任务返回 404。
 
 批量查询优先复用缓存。未配置获准批量查询的上游时，未命中的点标记 `batch_source_unavailable`，其他点仍返回已有结果。批量接口的启用与上游配置见 [部署说明](DEPLOYMENT.md)。
 
 ### Altview 地点批量预热
 
-`POST /nominatim/altview/place-batches` 接受与通用批量接口相同的 `{"points":[{"lat":30.28746,"lon":120.16145}]}` JSON，但要求 `Idempotency-Key`，无需把服务端 Bearer 凭据放进 APK。每批最多 `BATCH_LIMIT` 个点，使用共享 Altview 调用方的 `BATCH_PENDING_LIMIT` 待处理上限；任务 ID 为随机 128 位值。状态和结果路径分别为 `/nominatim/altview/place-batches/{job_id}` 与 `/nominatim/altview/place-batches/{job_id}/results`，返回字段和状态语义与通用批量接口一致。客户端应复用返回链接，至少间隔 2 秒轮询，并只展示已返回的有效地点；失败或尚未完成的条目保持空白。Raven 对提交入口单独按 IP 限速。
+`POST /nominatim/altview/place-batches` 接受与通用批量接口相同的 `{"points":[{"lat":30.28746,"lon":120.16145}]}` JSON，但要求 `Idempotency-Key`，无需把服务端 Bearer 凭据放进 APK。每批最多 `BATCH_LIMIT` 个点，使用共享 Altview 调用方的 `BATCH_PENDING_LIMIT` 待处理上限；任务 ID 为随机 128 位值。状态和结果路径分别为 `/nominatim/altview/place-batches/{job_id}` 与 `/nominatim/altview/place-batches/{job_id}/results`，返回字段和状态语义与通用批量接口一致。少于 10 个去重坐标的小批量会优先于普通批量任务。单点反查始终拥有更高的上游调度优先级。Raven 对提交入口单独按 IP 限速。
+
+Altview 结果接口同时支持 `page` 分页和 `cursor` 增量读取。新客户端建议每次请求 `limit=50`、`wait=8`，处理响应后保存 `next_cursor` 并继续请求，直到 `has_more=false` 且状态任务已完成。增量模式只返回新完成的条目，不重复发送先前已读结果。
+
+**游标读取示例**
+```http
+GET /nominatim/altview/place-batches/0123456789abcdef0123456789abcdef/results?cursor=0&limit=50&wait=8
+```
+```json
+{
+  "job_id": "0123456789abcdef0123456789abcdef",
+  "status": "running",
+  "total": 120,
+  "pending": 70,
+  "completed": 50,
+  "failed": 0,
+  "cursor": 0,
+  "next_cursor": 50,
+  "has_more": false,
+  "items": [
+    {"index": 7, "lat": 30.28746, "lon": 120.16145, "status": "resolved", "result": {"place_name": "灵隐寺", "place_quality": "precise"}}
+  ]
+}
+```
+`items` 按完成顺序返回，`index` 对应原提交列表中的位置。示例只展示一项，实际一包最多 50 项。没有新完成项时，服务最多等待 `wait` 秒后返回空 `items`，客户端应沿用原 `cursor` 重试。
 
 ### 3.1 Nominatim 逆地理编码代理
 

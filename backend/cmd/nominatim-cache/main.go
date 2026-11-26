@@ -10,6 +10,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"runtime/debug"
+	"sync"
 	"syscall"
 	"time"
 
@@ -98,11 +99,15 @@ func run() error {
 		defer listener.Close()
 		listeners = append(listeners, listener)
 	}
-	workerDone := make(chan struct{})
-	go func() {
-		defer close(workerDone)
-		jobs.Worker{Store: storage, Upstream: upstream, Locks: locks, Wake: wake}.Run(ctx)
-	}()
+	var workerGroup sync.WaitGroup
+	worker := jobs.Worker{Store: storage, Upstream: upstream, Locks: locks, Wake: wake}
+	for range 4 {
+		workerGroup.Add(1)
+		go func() {
+			defer workerGroup.Done()
+			worker.Run(ctx)
+		}()
+	}
 	pruneDone := make(chan struct{})
 	go func() {
 		defer close(pruneDone)
@@ -135,7 +140,7 @@ func run() error {
 			err = closeErr
 		}
 	}
-	<-workerDone
+	workerGroup.Wait()
 	<-pruneDone
 	if errors.Is(err, http.ErrServerClosed) {
 		return nil

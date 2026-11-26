@@ -19,20 +19,11 @@ import (
 
 var ErrNoResult = errors.New("no_result")
 var ErrBatchSourceUnavailable = errors.New("batch_source_unavailable")
-var errUpstreamBusy = errors.New("上游繁忙")
 
 type SourceConfig struct {
 	Name   string
 	URL    string
 	Photon bool
-}
-
-type upstreamGate struct {
-	busy    chan struct{}
-	next    time.Time
-	until   time.Time
-	fails   int
-	backoff time.Duration
 }
 
 type source struct {
@@ -66,7 +57,7 @@ func NewUpstream(configs []SourceConfig, batch *SourceConfig, interval, timeout 
 		host := strings.TrimSuffix(strings.ToLower(endpoint.Hostname()), ".")
 		gate := gates[host]
 		if gate == nil {
-			gate = &upstreamGate{busy: make(chan struct{}, 1)}
+			gate = &upstreamGate{}
 			gates[host] = gate
 		}
 		return source{config: cfg, url: endpoint, gate: gate}, nil
@@ -95,12 +86,16 @@ func NewUpstream(configs []SourceConfig, batch *SourceConfig, interval, timeout 
 
 func (u *Upstream) HasBatchSource() bool { return u.batch != nil }
 
-func (u *Upstream) Batch(ctx context.Context, point Point) (Response, UpstreamPayload, error) {
+func (u *Upstream) Batch(ctx context.Context, point Point, priorities ...RequestPriority) (Response, UpstreamPayload, error) {
 	var payload UpstreamPayload
 	if u.batch == nil {
 		return nil, payload, ErrBatchSourceUnavailable
 	}
-	response, err := u.request(ctx, *u.batch, point, true, &payload, "batch")
+	priority := PriorityBatch
+	if len(priorities) > 0 {
+		priority = priorities[0]
+	}
+	response, err := u.request(ctx, *u.batch, point, priority, &payload, "batch")
 	return response, payload, err
 }
 
@@ -129,31 +124,16 @@ func (u *Upstream) Reverse(ctx context.Context, point Point) (Response, Upstream
 	}
 	first := int((u.sequence.Add(1) - 1) % uint64(len(u.sources)))
 	var failures []string
-	var busy []source
 	for offset := range u.sources {
 		src := u.sources[(first+offset)%len(u.sources)]
-		response, err := u.reverseAttempt(ctx, src, point, len(u.sources)-offset+len(busy), false, &payload)
+		response, err := u.reverseAttempt(ctx, src, point, len(u.sources)-offset, &payload)
 		if err == nil {
 			return response, payload, nil
-		}
-		if errors.Is(err, errUpstreamBusy) {
-			busy = append(busy, src)
-			continue
 		}
 		failures = append(failures, src.config.Name+": "+err.Error())
 		if ctx.Err() != nil {
 			break
 		}
-	}
-	for i, src := range busy {
-		if ctx.Err() != nil {
-			break
-		}
-		response, err := u.reverseAttempt(ctx, src, point, len(busy)-i, true, &payload)
-		if err == nil {
-			return response, payload, nil
-		}
-		failures = append(failures, src.config.Name+": "+err.Error())
 	}
 	if len(failures) == 0 && ctx.Err() != nil {
 		failures = append(failures, ctx.Err().Error())
@@ -161,14 +141,14 @@ func (u *Upstream) Reverse(ctx context.Context, point Point) (Response, Upstream
 	return nil, payload, fmt.Errorf("%s: %s", prefix, strings.Join(failures, "; "))
 }
 
-func (u *Upstream) reverseAttempt(ctx context.Context, src source, point Point, remaining int, wait bool, payload *UpstreamPayload) (Response, error) {
+func (u *Upstream) reverseAttempt(ctx context.Context, src source, point Point, remaining int, payload *UpstreamPayload) (Response, error) {
 	if deadline, ok := ctx.Deadline(); ok {
 		// 为后续源保留时间。单个尝试也受 HTTP 客户端的上游超时限制。
 		attempt, cancel := context.WithTimeout(ctx, time.Until(deadline)/time.Duration(remaining))
 		defer cancel()
-		return u.request(attempt, src, point, wait, payload, "reverse")
+		return u.request(attempt, src, point, PriorityInteractive, payload, "reverse")
 	}
-	return u.request(ctx, src, point, wait, payload, "reverse")
+	return u.request(ctx, src, point, PriorityInteractive, payload, "reverse")
 }
 
 type Comparison struct {
@@ -181,7 +161,7 @@ type Comparison struct {
 func (u *Upstream) Compare(ctx context.Context, point Point) []Comparison {
 	results := make([]Comparison, 0, len(u.sources))
 	for _, src := range u.sources {
-		response, err := u.request(ctx, src, point, true, nil, "compare")
+		response, err := u.request(ctx, src, point, PriorityInteractive, nil, "compare")
 		result := Comparison{Source: src.config.Name, Address: map[string]any{}}
 		if err != nil {
 			result.DisplayName = "失败: " + err.Error()
@@ -197,7 +177,7 @@ type RetryLater struct{ At time.Time }
 
 func (e *RetryLater) Error() string { return "上游暂不可用" }
 
-func (u *Upstream) request(ctx context.Context, src source, point Point, wait bool, payload *UpstreamPayload, origin string) (_ Response, resultErr error) {
+func (u *Upstream) request(ctx context.Context, src source, point Point, priority RequestPriority, payload *UpstreamPayload, origin string) (_ Response, resultErr error) {
 	var recorded *UpstreamAttempt
 	defer func() {
 		if recorded == nil {
@@ -215,34 +195,12 @@ func (u *Upstream) request(ctx context.Context, src source, point Point, wait bo
 		}
 	}()
 	g := src.gate
-	if wait {
-		select {
-		case g.busy <- struct{}{}:
-		case <-ctx.Done():
-			return nil, ctx.Err()
-		}
-	} else {
-		select {
-		case g.busy <- struct{}{}:
-		default:
-			return nil, errUpstreamBusy
-		}
+	if err := g.acquire(ctx, priority, u.interval); err != nil {
+		return nil, err
 	}
-	defer func() { <-g.busy }()
+	defer g.release(u.interval)
 	if time.Now().Before(g.until) {
 		return nil, &RetryLater{At: g.until}
-	}
-	if delay := time.Until(g.next); delay > 0 {
-		if !wait {
-			return nil, errUpstreamBusy
-		}
-		timer := time.NewTimer(delay)
-		defer timer.Stop()
-		select {
-		case <-timer.C:
-		case <-ctx.Done():
-			return nil, ctx.Err()
-		}
 	}
 	if err := ctx.Err(); err != nil {
 		return nil, err
@@ -267,7 +225,6 @@ func (u *Upstream) request(ctx context.Context, src source, point Point, wait bo
 	req.Header.Set("User-Agent", "PhotoOrdo-Local/1.0 (echoflying@gmail.com)")
 	req.Header.Set("Referer", "http://localhost:3000/")
 	req.Header.Set("Accept-Language", "zh-CN,zh")
-	g.next = time.Now().Add(u.interval)
 	if u.Archive != nil {
 		recorded = &UpstreamAttempt{Source: src.config.Name, Origin: origin, Point: point, StartedAt: time.Now()}
 	}

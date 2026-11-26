@@ -71,7 +71,7 @@ func (w Worker) process(parent context.Context, task store.Task) error {
 	if task.Attempts > maxAttempts {
 		return w.Store.Finish(ctx, task, "failed", "attempts_exhausted", nil, 0)
 	}
-	response, payload, err := w.Upstream.Batch(ctx, task.Point)
+	response, payload, err := w.Upstream.Batch(ctx, task.Point, task.Priority)
 	updateCtx, stop := context.WithTimeout(parent, 5*time.Second)
 	defer stop()
 	switch {
