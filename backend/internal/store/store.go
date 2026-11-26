@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"net/http"
 	"strings"
 	"time"
 
@@ -230,19 +231,28 @@ func (s Store) Stats(ctx context.Context, started time.Time) (Stats, error) {
 	return result, err
 }
 
-func (s Store) RecordAccess(ctx context.Context, p geocode.Point, key string, hit, success bool) error {
+func (s Store) RecordAccess(ctx context.Context, p geocode.Point, key string, hit bool, status int, output string, upstream geocode.UpstreamPayload) error {
 	tx, err := s.DB.BeginTx(ctx, nil)
 	if err != nil {
 		return err
 	}
 	defer tx.Rollback()
 	now := time.Now().UnixMilli()
-	if _, err := tx.ExecContext(ctx, "INSERT INTO access_logs (cache_key,lat,lon,cached,accessed_at) VALUES (?,?,?,?,?)",
-		key, p.Lat, p.Lon, hit, now); err != nil {
+	log, err := tx.ExecContext(ctx, "INSERT INTO access_logs (cache_key,lat,lon,cached,accessed_at) VALUES (?,?,?,?,?)",
+		key, p.Lat, p.Lon, hit, now)
+	if err != nil {
+		return err
+	}
+	id, err := log.LastInsertId()
+	if err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, "INSERT INTO access_log_responses (access_log_id,upstream_source,upstream_body,response_status,response_body) VALUES (?,NULLIF(?,''),?,?,?)",
+		id, upstream.Source, upstream.Body, status, output); err != nil {
 		return err
 	}
 	if _, err := tx.ExecContext(ctx, "UPDATE stats SET total_requests=total_requests+1, cache_hits=cache_hits+?, cache_misses=cache_misses+?, last_updated_at=? WHERE id=1",
-		hit, !hit && success, now); err != nil {
+		hit, !hit && status == http.StatusOK, now); err != nil {
 		return err
 	}
 	return tx.Commit()
@@ -256,6 +266,21 @@ type AccessLog struct {
 	Hit   int      `json:"cached"`
 	At    int64    `json:"accessed_at"`
 	Label string   `json:"accessed_at_str"`
+}
+
+type AccessLogDetail struct {
+	UpstreamSource *string `json:"upstream_source"`
+	UpstreamBody   *string `json:"upstream_body"`
+	ResponseStatus *int    `json:"response_status"`
+	ResponseBody   *string `json:"response_body"`
+}
+
+func (s Store) LogDetail(ctx context.Context, id int64) (AccessLogDetail, error) {
+	var result AccessLogDetail
+	err := s.DB.QueryRowContext(ctx, `SELECT r.upstream_source,r.upstream_body,r.response_status,r.response_body
+		FROM access_logs l LEFT JOIN access_log_responses r ON r.access_log_id=l.id WHERE l.id=?`, id).
+		Scan(&result.UpstreamSource, &result.UpstreamBody, &result.ResponseStatus, &result.ResponseBody)
+	return result, err
 }
 
 func (s Store) Logs(ctx context.Context, hit *int, zone *time.Location, limit, offset int) ([]AccessLog, int64, error) {

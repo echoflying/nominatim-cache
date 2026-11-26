@@ -15,6 +15,13 @@ func TestRollbackAllowsOnlyCompletedCompatibleMigrations(t *testing.T) {
 	for _, m := range local {
 		base[m.name] = m.sum
 	}
+	previous := local[:2]
+	previousLedger := map[string]string{local[0].name: local[0].sum, local[1].name: local[1].sum}
+	withResponses := maps.Clone(previousLedger)
+	withResponses[local[2].name] = local[2].sum
+	if err := checkLedger(previous, withResponses, false); err != nil {
+		t.Fatalf("previous release cannot read the completed response migration: %v", err)
+	}
 	sum := strings.Repeat("a", 64)
 	for _, tc := range []struct {
 		name, checksum string
@@ -27,9 +34,9 @@ func TestRollbackAllowsOnlyCompletedCompatibleMigrations(t *testing.T) {
 		{"004_compat002_add_index.sql", sum, false},
 	} {
 		t.Run(tc.name+"/"+tc.checksum[:1], func(t *testing.T) {
-			installed := maps.Clone(base)
+			installed := maps.Clone(previousLedger)
 			installed[tc.name] = tc.checksum
-			if err := checkLedger(local, installed, false); (err == nil) != tc.allowed {
+			if err := checkLedger(previous, installed, false); (err == nil) != tc.allowed {
 				t.Fatalf("checked %s, expected allowed=%t, got %v", tc.name, tc.allowed, err)
 			}
 		})

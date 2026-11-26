@@ -71,6 +71,15 @@ class NominatimAPI {
     return result;
   }
 
+  async getLogDetail(id) {
+    const response = await this.authenticatedFetch(`${this.baseUrl}/admin/logs/${encodeURIComponent(id)}`);
+    const result = await response.json();
+    if (!result.success) {
+      throw new Error(response.status === 404 ? '这条请求已过期或不存在' : result.error || '读取请求详情失败');
+    }
+    return result.data;
+  }
+
    /**
     * 获取缓存列表
     */

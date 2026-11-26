@@ -15,21 +15,25 @@ function createElement() {
     addEventListener(type, handler) {
       this.listeners.set(type, handler);
     },
-    async trigger(type) {
+    async trigger(type, event) {
       const handler = this.listeners.get(type);
       if (!handler) {
         return;
       }
-      return await handler();
+      return await handler(event);
     }
   };
 }
 
-function createHarness(apiImpl) {
+function createHarness(apiImpl, detailImpl) {
   const elements = {
     requestTableBody: createElement(),
     refreshBtn: createElement(),
-    requestStatus: createElement()
+    requestStatus: createElement(),
+    requestDetail: { open: false, showModal() { this.open = true; } },
+    requestDetailStatus: createElement(),
+    requestUpstream: createElement(),
+    requestOutput: createElement()
   };
 
   const documentListeners = new Map();
@@ -77,7 +81,7 @@ function createHarness(apiImpl) {
   };
 
   const context = vm.createContext({
-    api: { getRecentLogs: apiImpl },
+    api: { getRecentLogs: apiImpl, getLogDetail: detailImpl },
     console,
     document,
     window,
@@ -190,4 +194,28 @@ test('page polls while visible and pauses when hidden', async () => {
 
   assert.equal(callCount, 2);
   assert.equal(harness.intervals.size, 1);
+});
+
+test('response details load only on click and display the original text', async () => {
+  const entry = { id: 42, cached: false, cache_key: '1.0000_2.0000' };
+  const raw = '{"upstream_id":12345678901234567890,"value":"<example>"}';
+  const output = '{"place_name":"地点"}\n';
+  const calls = [];
+  const harness = createHarness(async () => ({ data: [entry] }), async id => {
+    calls.push(id);
+    return { upstream_source: 'photon.komoot.io', upstream_body: raw, response_status: 200, response_body: output };
+  });
+
+  await harness.dispatchDocumentEvent('DOMContentLoaded');
+  await harness.flushAsyncWork();
+  assert.deepEqual(calls, []);
+  assert.match(harness.elements.requestTableBody.innerHTML, /data-log-id="42"/);
+  await harness.elements.requestTableBody.trigger('click', {
+    target: { closest: () => ({ dataset: { logId: '42', cached: '0' } }) }
+  });
+  assert.deepEqual(calls, ['42']);
+  assert.equal(harness.elements.requestDetail.open, true);
+  assert.equal(harness.elements.requestDetailStatus.textContent, '请求 #42 · photon.komoot.io · HTTP 200');
+  assert.equal(harness.elements.requestUpstream.textContent, raw);
+  assert.equal(harness.elements.requestOutput.textContent, output);
 });

@@ -61,6 +61,8 @@ func TestAdminEndpointsAreNotExposedOnPublicListener(t *testing.T) {
 		{s.Handler(), "/nominatim/admin/stats", http.StatusNotFound},
 		{s.Handler(), "/nominatim/", http.StatusNotFound},
 		{s.AdminHandler(), "/admin/stats", http.StatusUnauthorized},
+		{s.Handler(), "/admin/logs/1", http.StatusNotFound},
+		{s.AdminHandler(), "/admin/logs/1", http.StatusUnauthorized},
 		{s.AdminHandler(), "/api/reverse", http.StatusNotFound},
 	} {
 		recorder := httptest.NewRecorder()

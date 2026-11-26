@@ -1,9 +1,11 @@
 package httpapi
 
 import (
+	"bytes"
 	"context"
 	"database/sql"
 	"errors"
+	"io"
 	"log/slog"
 	"net"
 	"net/http"
@@ -26,22 +28,25 @@ func (s Server) reverse(w http.ResponseWriter, r *http.Request) {
 	timeout, logTimeout := s.reverseBudgets(r.Host)
 	ctx, cancel := context.WithTimeout(r.Context(), timeout)
 	defer cancel()
-	response, hit, err := s.lookup(ctx, point, key)
+	response, hit, upstream, err := s.lookup(ctx, point, key)
+	status := http.StatusOK
 	if err == nil {
 		if response.Text("place_quality") == "coarse" {
 			slog.Warn("地址质量过粗", "cached", hit)
 		}
-		writeJSON(w, http.StatusOK, response)
 	} else if errors.Is(err, errColdBusy) {
 		w.Header().Set("Retry-After", "2")
 		fail(w, http.StatusServiceUnavailable, err.Error())
 		return
 	} else {
-		fail(w, http.StatusInternalServerError, err.Error())
+		status = http.StatusInternalServerError
+		response = geocode.Response{"error": err.Error()}
 	}
+	var output bytes.Buffer
+	writeJSONTo(w, io.MultiWriter(&output, w), status, response)
 	recordCtx, stop := context.WithTimeout(context.WithoutCancel(r.Context()), logTimeout)
 	defer stop()
-	if logErr := s.Store.RecordAccess(recordCtx, point, key, hit, err == nil); logErr != nil {
+	if logErr := s.Store.RecordAccess(recordCtx, point, key, hit, status, output.String(), upstream); logErr != nil {
 		slog.Warn("记录反查统计失败", "error", logErr)
 	}
 }
@@ -57,7 +62,8 @@ func (s Server) reverseBudgets(authority string) (time.Duration, time.Duration) 
 	return s.Config.ReverseTimeout, 2 * time.Second
 }
 
-func (s Server) lookup(ctx context.Context, point geocode.Point, key string) (geocode.Response, bool, error) {
+func (s Server) lookup(ctx context.Context, point geocode.Point, key string) (geocode.Response, bool, geocode.UpstreamPayload, error) {
+	var upstream geocode.UpstreamPayload
 	readCache := func() (geocode.Response, error) {
 		cached, err := s.Store.Cache(ctx, key)
 		if errors.Is(err, sql.ErrNoRows) {
@@ -78,28 +84,28 @@ func (s Server) lookup(ctx context.Context, point geocode.Point, key string) (ge
 		return response, nil
 	}
 	if response, err := readCache(); response != nil || err != nil {
-		return response, response != nil, err
+		return response, response != nil, upstream, err
 	}
 	select {
 	case s.cold <- struct{}{}:
 		defer func() { <-s.cold }()
 	default:
-		return nil, false, errColdBusy
+		return nil, false, upstream, errColdBusy
 	}
 	release, err := s.Locks.Lock(ctx, key)
 	if err != nil {
-		return nil, false, errors.New("所有上游 Nominatim 服务均不可用: 等待查询超时")
+		return nil, false, upstream, errors.New("所有上游 Nominatim 服务均不可用: 等待查询超时")
 	}
 	defer release()
 	if response, err := readCache(); response != nil || err != nil {
-		return response, response != nil, err
+		return response, response != nil, upstream, err
 	}
-	response, err := s.Upstream.Reverse(ctx, point)
+	response, upstream, err := s.Upstream.Reverse(ctx, point)
 	if err != nil {
-		return nil, false, err
+		return nil, false, upstream, err
 	}
 	if err := s.Store.InsertCache(ctx, point, key, response); err != nil {
 		slog.Warn("保存上游地址失败", "error", err)
 	}
-	return geocode.WithPlace(response), false, nil
+	return geocode.WithPlace(response), false, upstream, nil
 }

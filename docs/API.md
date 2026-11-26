@@ -17,6 +17,7 @@
 | `/admin/cache/clear` | POST | Basic Auth | 清空缓存 |
 | `/admin/cache/add` | POST | Basic Auth | 手动添加缓存 |
 | `/admin/logs` | GET | Basic Auth | 访问日志 |
+| `/admin/logs/{id}` | GET | 管理认证 | 单条反查请求的上游与最终响应（Go v2） |
 | `/admin/stats` | GET | Basic Auth | 统计概览 |
 | `/admin/stats/daily` | GET | Basic Auth | 每日统计 |
 | `/admin/query` | POST | Basic Auth | 查询所有上游 |
@@ -371,6 +372,24 @@ Authorization: Basic YWRtaW46YWRtaW4xMjM=
   }
 }
 ```
+
+### 3.8 获取单条反查请求详情（Go v2）
+
+`GET /admin/logs/{id}` 需要管理权限。在 Raven 通过 `/ops/nominatim/admin/logs/{id}` 访问，请求 ID 来自日志列表。列表仍只返回摘要。
+
+```json
+{
+  "success": true,
+  "data": {
+    "upstream_source": "openstreetmap.org",
+    "upstream_body": "{\"display_name\":\"浙江省杭州市西湖区\",\"address\":{\"city\":\"杭州市\"}}",
+    "response_status": 200,
+    "response_body": "{\"display_name\":\"浙江省杭州市西湖区\",\"address\":{\"city\":\"杭州市\"},\"place_name\":\"杭州市\"}\n"
+  }
+}
+```
+
+两个正文以字符串传递，保留原文格式及数字精度。上游正文来自该次查询最终采用的上游，未经格式转换或短名计算。缓存命中及未采用任何上游结果的请求中，上游字段为 `null`。最终响应为应用写出的 HTTP 状态及 JSON 正文。详情适用于已写入访问日志的同步反查，入口拒绝、非法坐标和并发繁忙的提前返回不在此日志内。历史日志仍可查，未曾记录的字段返回 `null`。不存在或已过期的日志返回 404，非法 ID 返回 400。
 
 ---
 

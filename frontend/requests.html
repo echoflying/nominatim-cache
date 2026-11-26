@@ -4,8 +4,8 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>Nominatim Cache · 最近请求</title>
-  <link rel="stylesheet" href="vendor/tabler.min.css?v=20261126-2">
-  <link rel="stylesheet" href="css/style.css?v=20261126-2">
+  <link rel="stylesheet" href="vendor/tabler.min.css?v=20261126-3">
+  <link rel="stylesheet" href="css/style.css?v=20261126-3">
 </head>
 <body>
   <main class="admin-content">
@@ -16,15 +16,25 @@
     <section class="card data-card">
       <div class="table-responsive">
         <table class="table table-vcenter table-hover data-table">
-          <thead><tr><th>请求时间</th><th>坐标</th><th>缓存状态</th><th>缓存键</th></tr></thead>
-          <tbody id="requestTableBody"><tr><td colspan="4" class="table-loading">加载中...</td></tr></tbody>
+          <thead><tr><th>请求时间</th><th>坐标</th><th>缓存状态</th><th>缓存键</th><th class="text-end">响应详情</th></tr></thead>
+          <tbody id="requestTableBody"><tr><td colspan="5" class="table-loading">加载中...</td></tr></tbody>
         </table>
       </div>
     </section>
     <footer class="admin-footer">Nominatim Cache <span>最近 100 条 · 自动刷新</span></footer>
   </main>
-  <script src="js/admin-shell.js?v=20261126-2"></script>
-  <script src="js/api.js?v=20261126-2"></script>
-  <script src="js/request-list.js?v=20261126-2"></script>
+  <dialog id="requestDetail" class="request-detail" aria-labelledby="requestDetailTitle">
+    <header class="request-detail-header">
+      <div><h2 id="requestDetailTitle" class="h3 mb-1">请求响应</h2><div id="requestDetailStatus" class="text-secondary" role="status"></div></div>
+      <form method="dialog"><button class="btn btn-outline-secondary" autofocus>关闭</button></form>
+    </header>
+    <div class="request-detail-panels">
+      <section><h3 id="requestUpstreamTitle" class="h4">上游原始响应</h3><pre id="requestUpstream" aria-labelledby="requestUpstreamTitle" tabindex="0"></pre></section>
+      <section><h3 id="requestOutputTitle" class="h4">最终输出</h3><pre id="requestOutput" aria-labelledby="requestOutputTitle" tabindex="0"></pre></section>
+    </div>
+  </dialog>
+  <script src="js/admin-shell.js?v=20261126-3"></script>
+  <script src="js/api.js?v=20261126-3"></script>
+  <script src="js/request-list.js?v=20261126-3"></script>
 </body>
 </html>

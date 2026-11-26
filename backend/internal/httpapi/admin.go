@@ -178,6 +178,24 @@ func (s Server) logs(w http.ResponseWriter, r *http.Request) {
 	}})
 }
 
+func (s Server) logDetail(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	if err != nil || id <= 0 {
+		adminError(w, http.StatusBadRequest, "Invalid log ID")
+		return
+	}
+	detail, err := s.Store.LogDetail(r.Context(), id)
+	if errors.Is(err, sql.ErrNoRows) {
+		adminError(w, http.StatusNotFound, "Access log not found")
+		return
+	}
+	if err != nil {
+		operationError(w, err, "Failed to get access log detail")
+		return
+	}
+	adminOK(w, detail)
+}
+
 func (s Server) stats(w http.ResponseWriter, r *http.Request) {
 	data, err := s.Store.Stats(r.Context(), s.Started)
 	if err != nil {

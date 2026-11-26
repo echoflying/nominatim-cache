@@ -116,6 +116,7 @@ func (s Server) AdminHandler() http.Handler {
 	routes.HandleFunc("POST /admin/cache/add", s.admin(s.addCache))
 	routes.HandleFunc("POST /admin/query", s.admin(s.compare))
 	routes.HandleFunc("GET /admin/logs", s.admin(s.logs))
+	routes.HandleFunc("GET /admin/logs/{id}", s.admin(s.logDetail))
 	routes.HandleFunc("GET /admin/stats", s.admin(s.stats))
 	routes.HandleFunc("GET /admin/stats/daily", s.admin(s.daily))
 	routes.HandleFunc("GET /{$}", s.asset("index.html"))
@@ -166,9 +167,13 @@ func (s Server) health(w http.ResponseWriter, r *http.Request) {
 }
 
 func writeJSON(w http.ResponseWriter, status int, body any) {
+	writeJSONTo(w, w, status, body)
+}
+
+func writeJSONTo(w http.ResponseWriter, dest io.Writer, status int, body any) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.WriteHeader(status)
-	if err := json.NewEncoder(w).Encode(body); err != nil {
+	if err := json.NewEncoder(dest).Encode(body); err != nil {
 		slog.Debug("写入 API 响应失败", "error", err)
 	}
 }

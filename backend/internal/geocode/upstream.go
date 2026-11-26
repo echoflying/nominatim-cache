@@ -98,22 +98,28 @@ func (u *Upstream) Batch(ctx context.Context, point Point) (Response, error) {
 	if u.batch == nil {
 		return nil, ErrBatchSourceUnavailable
 	}
-	return u.request(ctx, *u.batch, point, true)
+	return u.request(ctx, *u.batch, point, true, nil)
 }
 
-func (u *Upstream) Reverse(ctx context.Context, point Point) (Response, error) {
+type UpstreamPayload struct {
+	Source string
+	Body   []byte
+}
+
+func (u *Upstream) Reverse(ctx context.Context, point Point) (Response, UpstreamPayload, error) {
+	var payload UpstreamPayload
 	const prefix = "所有上游 Nominatim 服务均不可用"
 	if len(u.sources) == 0 {
-		return nil, errors.New(prefix + ": 未配置上游")
+		return nil, payload, errors.New(prefix + ": 未配置上游")
 	}
 	first := int((u.sequence.Add(1) - 1) % uint64(len(u.sources)))
 	var failures []string
 	var busy []source
 	for offset := range u.sources {
 		src := u.sources[(first+offset)%len(u.sources)]
-		response, err := u.reverseAttempt(ctx, src, point, len(u.sources)-offset+len(busy), false)
+		response, err := u.reverseAttempt(ctx, src, point, len(u.sources)-offset+len(busy), false, &payload)
 		if err == nil {
-			return response, nil
+			return response, payload, nil
 		}
 		if errors.Is(err, errUpstreamBusy) {
 			busy = append(busy, src)
@@ -128,26 +134,26 @@ func (u *Upstream) Reverse(ctx context.Context, point Point) (Response, error) {
 		if ctx.Err() != nil {
 			break
 		}
-		response, err := u.reverseAttempt(ctx, src, point, len(busy)-i, true)
+		response, err := u.reverseAttempt(ctx, src, point, len(busy)-i, true, &payload)
 		if err == nil {
-			return response, nil
+			return response, payload, nil
 		}
 		failures = append(failures, src.config.Name+": "+err.Error())
 	}
 	if len(failures) == 0 && ctx.Err() != nil {
 		failures = append(failures, ctx.Err().Error())
 	}
-	return nil, fmt.Errorf("%s: %s", prefix, strings.Join(failures, "; "))
+	return nil, payload, fmt.Errorf("%s: %s", prefix, strings.Join(failures, "; "))
 }
 
-func (u *Upstream) reverseAttempt(ctx context.Context, src source, point Point, remaining int, wait bool) (Response, error) {
+func (u *Upstream) reverseAttempt(ctx context.Context, src source, point Point, remaining int, wait bool, payload *UpstreamPayload) (Response, error) {
 	if deadline, ok := ctx.Deadline(); ok {
 		// 为后续源保留时间。单个尝试也受 HTTP 客户端的上游超时限制。
 		attempt, cancel := context.WithTimeout(ctx, time.Until(deadline)/time.Duration(remaining))
 		defer cancel()
-		return u.request(attempt, src, point, wait)
+		return u.request(attempt, src, point, wait, payload)
 	}
-	return u.request(ctx, src, point, wait)
+	return u.request(ctx, src, point, wait, payload)
 }
 
 type Comparison struct {
@@ -160,7 +166,7 @@ type Comparison struct {
 func (u *Upstream) Compare(ctx context.Context, point Point) []Comparison {
 	results := make([]Comparison, 0, len(u.sources))
 	for _, src := range u.sources {
-		response, err := u.request(ctx, src, point, true)
+		response, err := u.request(ctx, src, point, true, nil)
 		result := Comparison{Source: src.config.Name, Address: map[string]any{}}
 		if err != nil {
 			result.DisplayName = "失败: " + err.Error()
@@ -176,7 +182,7 @@ type RetryLater struct{ At time.Time }
 
 func (e *RetryLater) Error() string { return "上游暂不可用" }
 
-func (u *Upstream) request(ctx context.Context, src source, point Point, wait bool) (Response, error) {
+func (u *Upstream) request(ctx context.Context, src source, point Point, wait bool, payload *UpstreamPayload) (Response, error) {
 	g := src.gate
 	if wait {
 		select {
@@ -233,6 +239,7 @@ func (u *Upstream) request(ctx context.Context, src source, point Point, wait bo
 	g.next = time.Now().Add(u.interval)
 	response, requestErr := u.client.Do(req)
 	var result Response
+	var rawBody []byte
 	var retryAt time.Time
 	switch {
 	case requestErr != nil:
@@ -266,6 +273,7 @@ func (u *Upstream) request(ctx context.Context, src source, point Point, wait bo
 				err = errors.New("无法读取上游响应")
 			} else {
 				result, err = parseUpstream(raw, point)
+				rawBody = raw
 			}
 		}
 	}
@@ -276,6 +284,9 @@ func (u *Upstream) request(ctx context.Context, src source, point Point, wait bo
 		g.fails, g.backoff, g.until = 0, 0, time.Time{}
 		if result != nil {
 			result["_source"] = src.config.Name
+			if payload != nil {
+				*payload = UpstreamPayload{Source: src.config.Name, Body: rawBody}
+			}
 		}
 		return result, err
 	}

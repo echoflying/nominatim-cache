@@ -82,6 +82,7 @@ func TestUpstreamCompareSharesCooldownWithBatch(t *testing.T) {
 }
 
 func TestPhotonResult(t *testing.T) {
+	const raw = ` {"type":"FeatureCollection","features":[{"properties":{"name":"朝晖文化公园","city":"杭州市","state":"浙江省","country":"中国"},"geometry":{"type":"Point","coordinates":[120.16,30.28]}}]} `
 	upstream, err := NewUpstream([]SourceConfig{{Name: "photon.komoot.io", URL: "https://example.test/photon", Photon: true}}, nil, time.Second, time.Second)
 	if err != nil {
 		t.Fatal(err)
@@ -90,12 +91,14 @@ func TestPhotonResult(t *testing.T) {
 		if r.URL.Query().Has("format") {
 			t.Error("Photon should receive coordinates without Nominatim options")
 		}
-		raw := `{"type":"FeatureCollection","features":[{"properties":{"name":"朝晖文化公园","city":"杭州市","state":"浙江省","country":"中国"}}]}`
 		return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(raw))}, nil
 	})
-	result, err := upstream.Reverse(context.Background(), Point{Lat: 30.28746, Lon: 120.16145})
+	result, payload, err := upstream.Reverse(context.Background(), Point{Lat: 30.28746, Lon: 120.16145})
 	if err != nil || result.Text("display_name") != "中国, 浙江省, 杭州市, 朝晖文化公园" || SelectPlace(result).Name != "朝晖文化公园" {
 		t.Fatalf("unexpected Photon result: %+v, %v", result, err)
+	}
+	if payload.Source != "photon.komoot.io" || string(payload.Body) != raw {
+		t.Fatalf("unexpected raw Photon response: %+v", payload)
 	}
 }
 
@@ -114,7 +117,7 @@ func TestReverseUsesReadyBackupWhenFirstSourceIsBusy(t *testing.T) {
 	})
 	ctx, cancel := context.WithTimeout(t.Context(), time.Second)
 	defer cancel()
-	result, err := upstream.Reverse(ctx, Point{Lat: 1, Lon: 2})
+	result, _, err := upstream.Reverse(ctx, Point{Lat: 1, Lon: 2})
 	if err != nil || result.Text("_source") != "ready" {
 		t.Fatalf("available backup was not used: %+v, %v", result, err)
 	}
@@ -137,9 +140,12 @@ func TestReverseReservesTimeForFallback(t *testing.T) {
 	})
 	ctx, cancel := context.WithTimeout(t.Context(), 2*time.Second)
 	defer cancel()
-	result, err := upstream.Reverse(ctx, Point{Lat: 1, Lon: 2})
+	result, payload, err := upstream.Reverse(ctx, Point{Lat: 1, Lon: 2})
 	if err != nil || result.Text("_source") != "ready" {
 		t.Fatalf("first upstream consumed the request budget: %+v, %v", result, err)
+	}
+	if payload.Source != "ready" || string(payload.Body) != `{"display_name":"备用源"}` {
+		t.Fatalf("unexpected backup payload: %+v", payload)
 	}
 }
 
