@@ -43,6 +43,8 @@ sudo bash install-raven-fresh.sh \
 
 2026-11-27（北京时间）发布 `v2.0.0-rc.9`（`fee0d90cdff5912ad0bdd494ae259fd7c6c17751`），运行 `006_batch_scheduling_and_result_cursor.sql`。迁移前备份为 `/mnt/datadisk0/nominatim-cache/backups/nominatim-cache-before-rc9-20261127-02.sql.gz`，SHA-256 为 `3b846805331f13588ef425624f8b7709dcfed0efa7ee6a8c9ac0b5df1905f0e6`。上线检查发现当前 Nginx 片段尚未包含 Altview 批量路径，因此同步发布 RC.9 包内的 Nginx 路由与限流区；原配置分别保存在 `/etc/nginx/snippets/nominatim.conf.before-rc9-20261127` 和 `/etc/nginx/conf.d/00-nominatim-rate.conf.before-rc9-20261127`。`nginx -t` 通过后重载。公网健康与帮助、单点回源和缓存、Altview 批量提交及 cursor 结果读取均已验证；临时批次已清理。服务版本为 RC.9，数据库就绪，RC.8 保留在上一版本目录。由于迁移 006 未声明与 RC.8 兼容，直接切回 RC.8 会被数据库版本检查拒绝；如需回退，须先停止服务并恢复上述迁移前数据库备份，再切换版本。恢复备份会丢弃备份之后的新写入。
 
+2026-11-27（北京时间）随后发布 `v2.0.0-rc.10`（`1349e2971bf98b52a0e6c209c8e51ea9eec55a4f`）和 `v2.0.0-rc.11`（`4a6ec56c02cb691736dfc59523d0f54bf518d85d`），将 Altview 专用路由替换为所有调用方共用的 `/nominatim/api/reverse/batches`，使用 Bearer 凭据、同一持久化队列和按 IP 限流。Nginx 旧片段备份为 `/etc/nginx/snippets/nominatim.conf.before-rc10-20261127` 与 `/etc/nginx/conf.d/00-nominatim-rate.conf.before-rc10-20261127`，配置校验通过后重载；此次未修改数据库结构。RC.11 健康检查正常，帮助接口列出通用 API 并返回 `batch.enabled=false`。生产 `BATCH_TOKENS` 为空，因此通用批量 API 当前关闭并返回 404；未生成或下发调用方凭据。Altview 专用公网路径已关闭。
+
 ### 旧站备份方法
 
 以下方法用于从仍在运行的旧版本制作独立快照。若已经拿到含 WAL 的归档，先用临时工作目录合成独立快照，再导入。
