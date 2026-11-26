@@ -119,6 +119,8 @@ func (s Server) help(w http.ResponseWriter, _ *http.Request) {
 			"batch_results":  "结果接口支持按 page/limit 分页，或使用 cursor、limit=1..50、wait=0..10 秒增量读取新完成项。",
 		},
 		"batch": map[string]any{
+			"enabled":               len(s.Config.Tokens) > 0,
+			"authentication":        "Authorization: Bearer <token>；由 BATCH_TOKENS 配置调用方凭据。",
 			"max_points_per_job":    500,
 			"small_batch_threshold": "去重后少于 10 个坐标",
 			"priority":              "单点反查优先级最高；小批量其次；大批量会随等待时间逐步提升。该顺序不会提高上游请求频率。",
@@ -128,6 +130,7 @@ func (s Server) help(w http.ResponseWriter, _ *http.Request) {
 			"200": "查询完成。没有合适的短地名时 place_name 可为空。",
 			"400": "坐标无效。",
 			"401": "批量接口的 Bearer 凭据无效或缺失。",
+			"404": "批量 API 未启用，或任务不存在/不属于当前调用方。",
 			"429": "公网入口限流。按 Retry-After 退避。",
 			"500": "查询失败，可延后再试。",
 			"502": "公网入口暂时无法连接反查服务。",

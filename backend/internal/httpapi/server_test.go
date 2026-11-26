@@ -22,6 +22,9 @@ func TestPlaceHelpAdvertisesPublicPaths(t *testing.T) {
 		Endpoints []struct{ Method, Path string }
 		Example   string
 		Fields    map[string]string `json:"response_fields"`
+		Batch     struct {
+			Enabled bool `json:"enabled"`
+		} `json:"batch"`
 	}
 	if err := json.NewDecoder(help.Body).Decode(&guide); err != nil {
 		t.Fatal(err)
@@ -44,7 +47,7 @@ func TestPlaceHelpAdvertisesPublicPaths(t *testing.T) {
 			t.Errorf("preflight for %s returned %d or lacked CORS", endpoint.Path, preflight.Code)
 		}
 	}
-	if len(wanted) != 0 || guide.Example != "/nominatim/reverse?lat=30.28746&lon=120.16145" || guide.Fields["place_name"] == "" || guide.Fields["place_quality"] == "" {
+	if len(wanted) != 0 || guide.Example != "/nominatim/reverse?lat=30.28746&lon=120.16145" || guide.Fields["place_name"] == "" || guide.Fields["place_quality"] == "" || guide.Batch.Enabled {
 		t.Fatalf("incomplete help: missing routes %v, got %+v", wanted, guide)
 	}
 

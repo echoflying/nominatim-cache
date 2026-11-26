@@ -74,7 +74,7 @@ curl -u admin:admin123 http://localhost:3000/admin/stats
 
 ### 公网批量反查
 
-所有 App、网站和其他调用方使用同一组批量接口，不按应用另设路径。提交请求需携带 `Authorization: Bearer <token>` 和 `Idempotency-Key`。服务器通过 `BATCH_TOKENS` 将凭据映射到调用方名称；调用方使用相同的接口和服务端队列。每批最多 `BATCH_LIMIT` 个点，状态和结果只对提交任务的调用方开放。Raven 对提交和结果查询分别按来源 IP 限流。
+所有 App、网站和其他调用方使用同一组批量接口，不按应用另设路径。提交请求需携带 `Authorization: Bearer <token>` 和 `Idempotency-Key`。服务器通过 `BATCH_TOKENS` 将凭据映射到调用方名称；调用方使用相同的接口和服务端队列。每批最多 `BATCH_LIMIT` 个点，状态和结果只对提交任务的调用方开放。Raven 对提交和结果查询分别按来源 IP 限流。若 `BATCH_TOKENS` 为空，帮助接口会显示 `batch.enabled=false`，批量路径返回 404，直到配置至少一个调用方凭据。
 
 批次按规模进入不同优先级：少于 10 个去重坐标的小批量优先于普通批量，单点反查优先级最高。所有任务仍共用上游速率限制。结果接口支持 `page` 分页和 `cursor` 增量读取。调用方可每次请求 `limit=50`、`wait=8`，处理响应后保存 `next_cursor` 并继续请求，直到 `has_more=false` 且任务已完成。增量模式只返回新完成的条目，不重复发送先前已读结果。
 
