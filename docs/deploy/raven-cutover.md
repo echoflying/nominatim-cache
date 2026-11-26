@@ -41,7 +41,7 @@ sudo bash install-raven-fresh.sh \
 
 2026-11-26 21:21（北京时间）发布 `v2.0.0-rc.7`（`17fde7f`），应用兼容迁移 `004_compat003_upstream_archive.sql`。上线时没有仍存的 RC.6 上游原文需要补存。验证了 HTTPS 健康、后台静态资源及匿名详情返回 401；缓存命中只保存摘要，14 天统计可读。一条公网缓存未命中请求返回 200，原始上游正文写入独立归档。回退版本 `v2.0.0-rc.6` 保留。
 
-2026-11-27（北京时间）发布 `v2.0.0-rc.9`（`fee0d90cdff5912ad0bdd494ae259fd7c6c17751`），运行 `006_batch_scheduling_and_result_cursor.sql`。迁移前备份为 `/mnt/datadisk0/nominatim-cache/backups/nominatim-cache-before-rc9-20261127-02.sql.gz`，SHA-256 为 `3b846805331f13588ef425624f8b7709dcfed0efa7ee6a8c9ac0b5df1905f0e6`。上线检查发现当前 Nginx 片段尚未包含 Altview 批量路径，因此同步发布 RC.9 包内的 Nginx 路由与限流区；原配置分别保存在 `/etc/nginx/snippets/nominatim.conf.before-rc9-20261127` 和 `/etc/nginx/conf.d/00-nominatim-rate.conf.before-rc9-20261127`。`nginx -t` 通过后重载。公网健康与帮助、单点回源和缓存、Altview 批量提交及 cursor 结果读取均已验证；临时批次已清理。服务版本为 RC.9，数据库就绪，RC.8 保留在上一版本目录用于恢复。
+2026-11-27（北京时间）发布 `v2.0.0-rc.9`（`fee0d90cdff5912ad0bdd494ae259fd7c6c17751`），运行 `006_batch_scheduling_and_result_cursor.sql`。迁移前备份为 `/mnt/datadisk0/nominatim-cache/backups/nominatim-cache-before-rc9-20261127-02.sql.gz`，SHA-256 为 `3b846805331f13588ef425624f8b7709dcfed0efa7ee6a8c9ac0b5df1905f0e6`。上线检查发现当前 Nginx 片段尚未包含 Altview 批量路径，因此同步发布 RC.9 包内的 Nginx 路由与限流区；原配置分别保存在 `/etc/nginx/snippets/nominatim.conf.before-rc9-20261127` 和 `/etc/nginx/conf.d/00-nominatim-rate.conf.before-rc9-20261127`。`nginx -t` 通过后重载。公网健康与帮助、单点回源和缓存、Altview 批量提交及 cursor 结果读取均已验证；临时批次已清理。服务版本为 RC.9，数据库就绪，RC.8 保留在上一版本目录。由于迁移 006 未声明与 RC.8 兼容，直接切回 RC.8 会被数据库版本检查拒绝；如需回退，须先停止服务并恢复上述迁移前数据库备份，再切换版本。恢复备份会丢弃备份之后的新写入。
 
 ### 旧站备份方法
 
