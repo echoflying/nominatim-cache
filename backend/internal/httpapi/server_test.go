@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/echoflying/nominatim-cache/backend/internal/config"
@@ -70,5 +71,30 @@ func TestAdminEndpointsAreNotExposedOnPublicListener(t *testing.T) {
 		if recorder.Code != tc.status {
 			t.Errorf("GET %s: status %d, want %d", tc.path, recorder.Code, tc.status)
 		}
+	}
+}
+
+func TestAltviewBatchEntryUsesDedicatedPublicRoutes(t *testing.T) {
+	handler := (Server{Config: config.Config{
+		BasePath: "/nominatim",
+		Tokens:   map[string]string{"test-caller": "this-is-a-long-enough-test-bearer-token"},
+	}}).Handler()
+	preflight := httptest.NewRecorder()
+	handler.ServeHTTP(preflight, httptest.NewRequest(http.MethodOptions, "/nominatim/altview/place-batches", nil))
+	if preflight.Code != http.StatusNoContent || preflight.Header().Get("Access-Control-Allow-Methods") != "POST, OPTIONS" {
+		t.Fatalf("Altview batch preflight returned %d", preflight.Code)
+	}
+
+	missingKey := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/nominatim/altview/place-batches", strings.NewReader(`{"points":[{"lat":30,"lon":120}]}`))
+	handler.ServeHTTP(missingKey, req)
+	if missingKey.Code != http.StatusBadRequest {
+		t.Fatalf("Altview batch should validate the idempotency key before storage, got %d", missingKey.Code)
+	}
+
+	privateRoute := httptest.NewRecorder()
+	handler.ServeHTTP(privateRoute, httptest.NewRequest(http.MethodGet, "/nominatim/api/reverse/batches/0123456789abcdef0123456789abcdef", nil))
+	if privateRoute.Code != http.StatusUnauthorized {
+		t.Fatalf("general batch API became public: got %d", privateRoute.Code)
 	}
 }

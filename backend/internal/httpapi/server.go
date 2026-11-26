@@ -44,6 +44,9 @@ func (s Server) Handler() http.Handler {
 	routes.HandleFunc("POST /api/reverse/batches", s.batchAuth(s.submitBatch))
 	routes.HandleFunc("GET /api/reverse/batches/{id}", s.batchAuth(s.batchStatus))
 	routes.HandleFunc("GET /api/reverse/batches/{id}/results", s.batchAuth(s.batchResults))
+	routes.HandleFunc("POST /altview/place-batches", altviewBatchAccess(s.submitBatch))
+	routes.HandleFunc("GET /altview/place-batches/{id}", altviewBatchAccess(s.batchStatus))
+	routes.HandleFunc("GET /altview/place-batches/{id}/results", altviewBatchAccess(s.batchResults))
 
 	mux := routes
 	if prefix := s.Config.BasePath; prefix != "" {
@@ -65,6 +68,25 @@ func (s Server) Handler() http.Handler {
 				w.Header().Set("Access-Control-Allow-Methods", "GET, HEAD, OPTIONS")
 				w.WriteHeader(http.StatusNoContent)
 				return
+			}
+		case "/altview/place-batches":
+			w.Header().Set("Access-Control-Allow-Origin", "*")
+			w.Header().Set("Access-Control-Expose-Headers", "Location, Retry-After")
+			if r.Method == http.MethodOptions {
+				w.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS")
+				w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Idempotency-Key")
+				w.WriteHeader(http.StatusNoContent)
+				return
+			}
+		default:
+			if strings.HasPrefix(path, "/altview/place-batches/") {
+				w.Header().Set("Access-Control-Allow-Origin", "*")
+				if r.Method == http.MethodOptions {
+					w.Header().Set("Access-Control-Allow-Methods", "GET, OPTIONS")
+					w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+					w.WriteHeader(http.StatusNoContent)
+					return
+				}
 			}
 		}
 		mux.ServeHTTP(w, r)

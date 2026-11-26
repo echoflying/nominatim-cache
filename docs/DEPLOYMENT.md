@@ -13,7 +13,7 @@ Raven 首次部署所用的实际端口、数据库和切换步骤见 [Raven 部
 
 公开 API 默认监听 `127.0.0.1:3000`，路径前缀用 `BASE_PATH` 指定。管理页面和管理 API 默认监听 `127.0.0.1:3001`，用 `ADMIN_LISTEN_ADDR` 配置独立回环地址，用 `FRONTEND_DIR` 指定静态资源目录。生产用独立的私有 HTTPS 管理入口，并设置非默认管理账号与密码。管理凭据只保留在当前页面内存，旧存储键会清理，首次发布时轮换旧凭据。
 
-Raven 使用 `BASE_PATH=/nominatim`。在 Nginx `http` 块引入 `deploy/raven/nominatim-rate.conf`，在 `x.zaitu.cn` 的 HTTPS `server` 块引入 `deploy/raven/nominatim-location.conf`。运行 `nginx -t` 再重载。公网只接入 `/reverse`、`/health` 和 `/help` 三个 API，路径均带 `/nominatim` 前缀。
+Raven 使用 `BASE_PATH=/nominatim`。在 Nginx `http` 块引入 `deploy/raven/nominatim-rate.conf`，在 `x.zaitu.cn` 的 HTTPS `server` 块引入 `deploy/raven/nominatim-location.conf`。运行 `nginx -t` 再重载。公网接入 `/reverse`、`/health`、`/help` 及限流的 `/altview/place-batches` 路由，路径均带 `/nominatim` 前缀；通用批量任务路由仍不对公网开放。
 
 Raven 的管理入口为 `https://x.zaitu.cn/ops/nominatim/`。OPS 注册系统 `nominatim` 与权限 `nominatim.access`，首次授权现有超级管理员。在同一 HTTPS `server` 引入 `deploy/raven/nominatim-ops-location.conf`。用 root 运行 `python3 deploy/raven/render-ops-upstream-auth.py` 生成仅 root 可读的 Nginx 认证片段。Nominatim 的管理账号或密码轮换后重新生成片段，再校验和重载 Nginx。验证登录前跳转、未授权账号 403、登录后统计及缓存列表，并检查跨站写请求被拒绝。
 
