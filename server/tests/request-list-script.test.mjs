@@ -32,6 +32,7 @@ function createHarness(apiImpl, detailImpl) {
     requestStatus: createElement(),
     requestDetail: { open: false, showModal() { this.open = true; } },
     requestDetailStatus: createElement(),
+    requestUpstreamTitle: createElement(),
     requestUpstream: createElement(),
     requestOutput: createElement()
   };
@@ -229,4 +230,49 @@ test('response details format JSON on click without rounding numbers or changing
     target: { closest: () => ({ dataset: { logId: '42', cached: '0' } }) }
   });
   assert.equal(harness.elements.requestUpstream.textContent, raw);
+});
+
+test('request details show cache provenance or a missing-source note alongside the actual output', async () => {
+  const replies = {
+    42: {
+      cache_original_source: 'photon.komoot.io',
+      cache_original_kind: 'upstream',
+      cache_original_body: '{"type":"FeatureCollection","features":[]}',
+      response_status: 200,
+      response_body: '{"place_name":"后海","cached":true}'
+    },
+    43: { response_status: 500, response_body: '{"error":"Cache unavailable"}' }
+  };
+  const harness = createHarness(async () => ({ data: [] }), async id => replies[id]);
+  await harness.dispatchDocumentEvent('DOMContentLoaded');
+  for (const [id, cached] of [['42', '1'], ['43', '0']]) {
+    harness.elements.requestDetail.open = false;
+    await harness.elements.requestTableBody.trigger('click', {
+      target: { closest: () => ({ dataset: { logId: id, cached } }) }
+    });
+    if (cached === '1') {
+      assert.equal(harness.elements.requestUpstreamTitle.textContent, '缓存最初的上游原文');
+      assert.match(harness.elements.requestUpstream.textContent, /"type": "FeatureCollection"/);
+      assert.match(harness.elements.requestOutput.textContent, /"place_name": "后海"/);
+    } else {
+      assert.match(harness.elements.requestUpstream.textContent, /没有可展示的上游原文/);
+      assert.match(harness.elements.requestOutput.textContent, /"error": "Cache unavailable"/);
+    }
+  }
+});
+
+test('recent requests show recorded sources without loading request details', async () => {
+  const harness = createHarness(async () => ({
+    data: [
+      { id: 1, cached: 0, source: 'photon.komoot.io' },
+      { id: 2, cached: 1, source: 'manual' },
+      { id: 3, cached: 1, source: null }
+    ]
+  }), () => assert.fail('summary rendering should not load detail'));
+  await harness.dispatchDocumentEvent('DOMContentLoaded');
+  await harness.flushAsyncWork();
+  const rows = harness.elements.requestTableBody.innerHTML;
+  assert.match(rows, /class="text-nowrap">photon\.komoot\.io</);
+  assert.match(rows, /class="text-nowrap">人工录入</);
+  assert.match(rows, /class="text-secondary">未记录</);
 });

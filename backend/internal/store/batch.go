@@ -147,7 +147,7 @@ func batchCache(ctx context.Context, tx *sql.Tx, points map[string]geocode.Point
 	for key := range points {
 		args = append(args, key)
 	}
-	rows, err := tx.QueryContext(ctx, "SELECT "+cacheColumns+" FROM cache_entries WHERE cache_key IN ("+
+	rows, err := tx.QueryContext(ctx, "SELECT "+cacheReadColumns+" FROM cache_entries WHERE cache_key IN ("+
 		strings.Join(slices.Repeat([]string{"?"}, len(args)), ",")+")", args...)
 	if err != nil {
 		return nil, err
@@ -295,7 +295,7 @@ func owned(result sql.Result, err error) error {
 
 // Finish resolves every batch item waiting on the key. Fresh upstream results
 // and task completion are committed in the same transaction.
-func (s Store) Finish(ctx context.Context, task Task, status, reason string, response geocode.Response) error {
+func (s Store) Finish(ctx context.Context, task Task, status, reason string, response geocode.Response, archiveID int64) error {
 	tx, err := s.DB.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelReadCommitted})
 	if err != nil {
 		return err
@@ -307,7 +307,7 @@ func (s Store) Finish(ctx context.Context, task Task, status, reason string, res
 		return err
 	}
 	if status == "resolved" {
-		if err := insertCache(ctx, tx, task.Point, task.Key, response, now); err != nil {
+		if err := insertCache(ctx, tx, task.Point, task.Key, response, now, archiveID); err != nil {
 			return err
 		}
 	}

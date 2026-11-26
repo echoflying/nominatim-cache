@@ -8,6 +8,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const requestStatus = document.getElementById('requestStatus');
   const detail = document.getElementById('requestDetail');
   const detailStatus = document.getElementById('requestDetailStatus');
+  const upstreamTitle = document.getElementById('requestUpstreamTitle');
   const upstream = document.getElementById('requestUpstream');
   const output = document.getElementById('requestOutput');
 
@@ -22,7 +23,7 @@ document.addEventListener('DOMContentLoaded', () => {
       return true;
     } catch (error) {
       console.error('加载最近请求失败:', error);
-      tableBody.innerHTML = `<tr><td colspan="5" class="table-loading">加载失败: ${escapeHtml(error.message)}</td></tr>`;
+      tableBody.innerHTML = `<tr><td colspan="6" class="table-loading">加载失败: ${escapeHtml(error.message)}</td></tr>`;
       if (isAuthError(error)) {
         stopPolling();
         requestStatus.textContent = '认证失败，请点击立即刷新';
@@ -36,7 +37,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function renderTable(data) {
     if (!data || data.length === 0) {
-      tableBody.innerHTML = '<tr><td colspan="5" class="table-loading">暂无请求记录</td></tr>';
+      tableBody.innerHTML = '<tr><td colspan="6" class="table-loading">暂无请求记录</td></tr>';
       return;
     }
 
@@ -50,6 +51,7 @@ document.addEventListener('DOMContentLoaded', () => {
         <td>${formatDate(entry.accessed_at)}</td>
         <td>${formatCoords(entry.lat, entry.lon)}</td>
         <td>${entry.cached ? '<span class="success-badge">命中</span>' : '<span class="fail-badge">未命中</span>'}</td>
+        <td class="text-nowrap">${entry.source ? escapeHtml(formatSource(entry.source)) : '<span class="text-secondary">未记录</span>'}</td>
         <td title="${escapeHtml(entry.cache_key || '')}">${escapeHtml(truncateText(entry.cache_key || '-', 36))}</td>
         <td class="text-end">${detailButton}</td>
       </tr>
@@ -59,8 +61,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
   async function showDetail(button) {
     const id = button.dataset.logId;
+    const cached = button.dataset.cached === '1';
     const load = ++detailLoad;
     detailStatus.textContent = `请求 #${id} · 正在读取`;
+    upstreamTitle.textContent = cached ? '缓存来源' : '本次上游原始响应';
     upstream.textContent = '';
     output.textContent = '';
     detail.showModal();
@@ -68,22 +72,25 @@ document.addEventListener('DOMContentLoaded', () => {
       const data = await api.getLogDetail(id);
       if (load !== detailLoad || !detail.open) return;
       const labels = [`请求 #${id}`];
-      if (data.upstream_source) labels.push(data.upstream_source);
+      const source = cached ? data.cache_original_source : data.upstream_source;
+      if (source) labels.push(formatSource(source));
       if (data.response_status != null) labels.push(`HTTP ${data.response_status}`);
       detailStatus.textContent = labels.join(' · ');
-      if (data.response_body == null) {
-        const cacheSummary = button.dataset.cached === '1' && data.response_status != null;
-        upstream.textContent = cacheSummary ? '本次命中缓存，未请求上游。' : '历史记录未保存上游响应。';
-        output.textContent = cacheSummary ? '缓存命中仅保留状态与访问摘要。' : '历史记录未保存最终输出。';
-        return;
+      if (cached && data.cache_original_body != null) {
+        upstreamTitle.textContent = data.cache_original_kind === 'upstream' ? '缓存最初的上游原文' : '缓存入库快照';
       }
-      const noUpstream = button.dataset.cached === '1' ? '本次命中缓存，未请求上游。' : '本次未采用上游结果。';
-      upstream.textContent = data.upstream_body == null ? noUpstream : formatJSON(data.upstream_body);
-      output.textContent = formatJSON(data.response_body);
+      const input = cached ? data.cache_original_body : data.upstream_body;
+      const missingInput = cached ? '这条记录未保存缓存来源。' : '这条记录没有可展示的上游原文。';
+      upstream.textContent = input == null ? missingInput : formatJSON(input);
+      output.textContent = data.response_body == null ? '这条历史记录未保存下发正文。' : formatJSON(data.response_body);
     } catch (error) {
       if (load !== detailLoad || !detail.open) return;
       detailStatus.textContent = `请求 #${id} · ${error.message}`;
     }
+  }
+
+  function formatSource(source) {
+    return source === 'manual' ? '人工录入' : source;
   }
 
   function formatJSON(text) {

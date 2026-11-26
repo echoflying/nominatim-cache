@@ -41,26 +41,28 @@ func Open(dsn string) (*sql.DB, error) {
 }
 
 type Cache struct {
-	Key         string  `json:"cache_key"`
-	Lat         float64 `json:"lat"`
-	Lon         float64 `json:"lon"`
-	DisplayName *string `json:"display_name"`
-	Address     *string `json:"address"`
-	Type        *string `json:"place_type"`
-	Source      *string `json:"source"`
-	Raw         string  `json:"nominatim_response"`
-	First       int64   `json:"first_cached_at"`
-	Last        int64   `json:"last_accessed_at"`
-	Count       *int64  `json:"access_count"`
+	UpstreamArchiveID *int64  `json:"-"`
+	Key               string  `json:"cache_key"`
+	Lat               float64 `json:"lat"`
+	Lon               float64 `json:"lon"`
+	DisplayName       *string `json:"display_name"`
+	Address           *string `json:"address"`
+	Type              *string `json:"place_type"`
+	Source            *string `json:"source"`
+	Raw               string  `json:"nominatim_response"`
+	First             int64   `json:"first_cached_at"`
+	Last              int64   `json:"last_accessed_at"`
+	Count             *int64  `json:"access_count"`
 }
 
 const cacheColumns = "cache_key,lat,lon,display_name,address,place_type,source,nominatim_response,first_cached_at,last_accessed_at,access_count"
+const cacheReadColumns = cacheColumns + ",upstream_archive_id"
 
 type scanner interface{ Scan(...any) error }
 
 func scanCache(row scanner) (Cache, error) {
 	var c Cache
-	err := row.Scan(&c.Key, &c.Lat, &c.Lon, &c.DisplayName, &c.Address, &c.Type, &c.Source, &c.Raw, &c.First, &c.Last, &c.Count)
+	err := row.Scan(&c.Key, &c.Lat, &c.Lon, &c.DisplayName, &c.Address, &c.Type, &c.Source, &c.Raw, &c.First, &c.Last, &c.Count, &c.UpstreamArchiveID)
 	return c, err
 }
 
@@ -93,7 +95,7 @@ func (c Cache) Public() (geocode.Response, error) {
 }
 
 func (s Store) Cache(ctx context.Context, key string) (Cache, error) {
-	return scanCache(s.DB.QueryRowContext(ctx, "SELECT "+cacheColumns+" FROM cache_entries WHERE cache_key=?", key))
+	return scanCache(s.DB.QueryRowContext(ctx, "SELECT "+cacheReadColumns+" FROM cache_entries WHERE cache_key=?", key))
 }
 
 func (s Store) Touch(ctx context.Context, key string, now int64) error {
@@ -105,7 +107,7 @@ type execer interface {
 	ExecContext(context.Context, string, ...any) (sql.Result, error)
 }
 
-func insertCache(ctx context.Context, tx execer, point geocode.Point, key string, r geocode.Response, now int64) error {
+func insertCache(ctx context.Context, tx execer, point geocode.Point, key string, r geocode.Response, now, archiveID int64) error {
 	raw, err := json.Marshal(r)
 	if err != nil {
 		return err
@@ -114,14 +116,14 @@ func insertCache(ctx context.Context, tx execer, point geocode.Point, key string
 	if err != nil {
 		return err
 	}
-	_, err = tx.ExecContext(ctx, "INSERT INTO cache_entries ("+cacheColumns+") VALUES (?,?,?,?,?,?,?,?,?,?,1) "+
+	_, err = tx.ExecContext(ctx, "INSERT INTO cache_entries ("+cacheReadColumns+") VALUES (?,?,?,?,?,?,?,?,?,?,1,NULLIF(?,0)) "+
 		"ON DUPLICATE KEY UPDATE cache_key=VALUES(cache_key)", key, point.Lat, point.Lon,
-		r.Text("display_name"), string(address), geocode.PlaceType(r), r.Text("_source"), string(raw), now, now)
+		r.Text("display_name"), string(address), geocode.PlaceType(r), r.Text("_source"), string(raw), now, now, archiveID)
 	return err
 }
 
-func (s Store) InsertCache(ctx context.Context, point geocode.Point, key string, r geocode.Response) error {
-	return insertCache(ctx, s.DB, point, key, r, time.Now().UnixMilli())
+func (s Store) InsertCache(ctx context.Context, point geocode.Point, key string, r geocode.Response, archiveID int64) error {
+	return insertCache(ctx, s.DB, point, key, r, time.Now().UnixMilli(), archiveID)
 }
 
 func (s Store) ManualCache(ctx context.Context, point geocode.Point, displayName string, address map[string]any) (bool, error) {
@@ -147,7 +149,7 @@ func (s Store) ManualCache(ctx context.Context, point geocode.Point, displayName
 		return false, err
 	}
 	if exists {
-		_, err = tx.ExecContext(ctx, "UPDATE cache_entries SET lat=?,lon=?,display_name=?,address=?,source='manual',nominatim_response=?,first_cached_at=? WHERE cache_key=?",
+		_, err = tx.ExecContext(ctx, "UPDATE cache_entries SET lat=?,lon=?,display_name=?,address=?,source='manual',nominatim_response=?,first_cached_at=?,upstream_archive_id=NULL WHERE cache_key=?",
 			point.Lat, point.Lon, displayName, string(formattedAddress), string(raw), now, key)
 	} else {
 		_, err = tx.ExecContext(ctx, "INSERT INTO cache_entries ("+cacheColumns+") VALUES (?,?,?,?,?,?,'manual',?,?,?,1)",
@@ -193,7 +195,7 @@ func (s Store) ListCache(ctx context.Context, search, order, sort string, limit,
 	if strings.EqualFold(order, "ASC") {
 		direction = "ASC"
 	}
-	rows, err := s.DB.QueryContext(ctx, "SELECT "+cacheColumns+" FROM cache_entries"+where+
+	rows, err := s.DB.QueryContext(ctx, "SELECT "+cacheReadColumns+" FROM cache_entries"+where+
 		" ORDER BY "+column+" "+direction+",id "+direction+" LIMIT ? OFFSET ?", append(args, limit, offset)...)
 	if err != nil {
 		return nil, 0, err
@@ -231,12 +233,13 @@ func (s Store) Stats(ctx context.Context, started time.Time) (Stats, error) {
 	return result, err
 }
 
-func (s Store) RecordAccess(ctx context.Context, p geocode.Point, key string, hit bool, status int, output string, upstream geocode.UpstreamPayload) error {
+func (s Store) RecordAccess(ctx context.Context, p geocode.Point, key string, status int, output string, upstream geocode.UpstreamPayload, cached *Cache) error {
 	tx, err := s.DB.BeginTx(ctx, nil)
 	if err != nil {
 		return err
 	}
 	defer tx.Rollback()
+	hit := cached != nil
 	now := time.Now().UnixMilli()
 	log, err := tx.ExecContext(ctx, "INSERT INTO access_logs (cache_key,lat,lon,cached,accessed_at) VALUES (?,?,?,?,?)",
 		key, p.Lat, p.Lon, hit, now)
@@ -247,9 +250,20 @@ func (s Store) RecordAccess(ctx context.Context, p geocode.Point, key string, hi
 	if err != nil {
 		return err
 	}
+	var originalID *int64
+	var originalSource *string
+	var originalBody any
+	if hit {
+		originalID = cached.UpstreamArchiveID
+		if originalID == nil {
+			originalSource, originalBody = cached.Source, cached.Raw
+		}
+	}
 	if _, err := tx.ExecContext(ctx, `INSERT INTO access_log_responses
-		(access_log_id,upstream_source,upstream_body,response_status,response_body,upstream_archived)
-		VALUES (?,NULLIF(?,''),?,?,?,?)`, id, upstream.Source, upstream.Body, status, output, upstream.Archived); err != nil {
+		(access_log_id,upstream_source,upstream_body,response_status,response_body,upstream_archived,
+		 cache_original_archive_id,cache_original_source,cache_original_body)
+		VALUES (?,NULLIF(?,''),?,?,?,?,?,?,?)`, id, upstream.Source, upstream.Body, status, output,
+		upstream.ArchiveID > 0, originalID, originalSource, originalBody); err != nil {
 		return err
 	}
 	if _, err := tx.ExecContext(ctx, "UPDATE stats SET total_requests=total_requests+1, cache_hits=cache_hits+?, cache_misses=cache_misses+?, last_updated_at=? WHERE id=1",
@@ -260,27 +274,35 @@ func (s Store) RecordAccess(ctx context.Context, p geocode.Point, key string, hi
 }
 
 type AccessLog struct {
-	ID    int64    `json:"id"`
-	Key   *string  `json:"cache_key"`
-	Lat   *float64 `json:"lat"`
-	Lon   *float64 `json:"lon"`
-	Hit   int      `json:"cached"`
-	At    int64    `json:"accessed_at"`
-	Label string   `json:"accessed_at_str"`
+	ID     int64    `json:"id"`
+	Key    *string  `json:"cache_key"`
+	Lat    *float64 `json:"lat"`
+	Lon    *float64 `json:"lon"`
+	Hit    int      `json:"cached"`
+	Source *string  `json:"source"`
+	At     int64    `json:"accessed_at"`
+	Label  string   `json:"accessed_at_str"`
 }
 
 type AccessLogDetail struct {
-	UpstreamSource *string `json:"upstream_source"`
-	UpstreamBody   *string `json:"upstream_body"`
-	ResponseStatus *int    `json:"response_status"`
-	ResponseBody   *string `json:"response_body"`
+	UpstreamSource      *string `json:"upstream_source"`
+	UpstreamBody        *string `json:"upstream_body"`
+	ResponseStatus      *int    `json:"response_status"`
+	ResponseBody        *string `json:"response_body"`
+	CacheOriginalSource *string `json:"cache_original_source"`
+	CacheOriginalBody   *string `json:"cache_original_body"`
+	CacheOriginalKind   *string `json:"cache_original_kind"`
 }
 
 func (s Store) LogDetail(ctx context.Context, id int64) (AccessLogDetail, error) {
 	var result AccessLogDetail
-	err := s.DB.QueryRowContext(ctx, `SELECT r.upstream_source,r.upstream_body,r.response_status,NULLIF(r.response_body,'')
-		FROM access_logs l LEFT JOIN access_log_responses r ON r.access_log_id=l.id WHERE l.id=?`, id).
-		Scan(&result.UpstreamSource, &result.UpstreamBody, &result.ResponseStatus, &result.ResponseBody)
+	err := s.DB.QueryRowContext(ctx, `SELECT r.upstream_source,r.upstream_body,r.response_status,NULLIF(r.response_body,''),
+		COALESCE(a.source,r.cache_original_source),COALESCE(a.response_body,r.cache_original_body),
+		CASE WHEN a.response_body IS NOT NULL THEN 'upstream' WHEN r.cache_original_body IS NOT NULL THEN 'cache_snapshot' END
+		FROM access_logs l LEFT JOIN access_log_responses r ON r.access_log_id=l.id
+		LEFT JOIN upstream_archive a ON a.id=r.cache_original_archive_id WHERE l.id=?`, id).
+		Scan(&result.UpstreamSource, &result.UpstreamBody, &result.ResponseStatus, &result.ResponseBody,
+			&result.CacheOriginalSource, &result.CacheOriginalBody, &result.CacheOriginalKind)
 	return result, err
 }
 
@@ -288,14 +310,17 @@ func (s Store) Logs(ctx context.Context, hit *int, zone *time.Location, limit, o
 	where := ""
 	args := []any{}
 	if hit != nil {
-		where, args = " WHERE cached=?", []any{*hit}
+		where, args = " WHERE l.cached=?", []any{*hit}
 	}
 	var total int64
-	if err := s.DB.QueryRowContext(ctx, "SELECT COUNT(*) FROM access_logs"+where, args...).Scan(&total); err != nil {
+	if err := s.DB.QueryRowContext(ctx, "SELECT COUNT(*) FROM access_logs l"+where, args...).Scan(&total); err != nil {
 		return nil, 0, err
 	}
-	rows, err := s.DB.QueryContext(ctx, "SELECT id,cache_key,lat,lon,cached,accessed_at FROM access_logs"+where+
-		" ORDER BY accessed_at DESC,id DESC LIMIT ? OFFSET ?", append(args, limit, offset)...)
+	rows, err := s.DB.QueryContext(ctx, `SELECT l.id,l.cache_key,l.lat,l.lon,l.cached,l.accessed_at,
+		CASE WHEN l.cached=1 THEN COALESCE(a.source,NULLIF(r.cache_original_source,'')) ELSE r.upstream_source END
+		FROM access_logs l LEFT JOIN access_log_responses r ON r.access_log_id=l.id
+		LEFT JOIN upstream_archive a ON a.id=r.cache_original_archive_id`+where+
+		" ORDER BY l.accessed_at DESC,l.id DESC LIMIT ? OFFSET ?", append(args, limit, offset)...)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -303,7 +328,7 @@ func (s Store) Logs(ctx context.Context, hit *int, zone *time.Location, limit, o
 	result := make([]AccessLog, 0)
 	for rows.Next() {
 		var item AccessLog
-		if err := rows.Scan(&item.ID, &item.Key, &item.Lat, &item.Lon, &item.Hit, &item.At); err != nil {
+		if err := rows.Scan(&item.ID, &item.Key, &item.Lat, &item.Lon, &item.Hit, &item.At, &item.Source); err != nil {
 			return nil, 0, err
 		}
 		item.Label = time.UnixMilli(item.At).In(zone).Format("2006/1/2 15:04:05")

@@ -238,6 +238,7 @@ Authorization: Basic YWRtaW46YWRtaW4xMjM=
 ### 3.4 获取单个缓存详情
 
 获取指定缓存条目的详细信息。
+缓存清单中的“详情”按钮展示该条目的地点名称判断字段、缓存元信息和保存的原始响应；其中 `place_name` 与 `place_source_field` 用于说明短地点名及其选取来源。
 
 **请求:**
 ```
@@ -324,6 +325,8 @@ Authorization: Basic YWRtaW46YWRtaW4xMjM=
 
 获取最近的访问日志。
 
+Go v2 的每条摘要包含 `source`。回源时是本次采用的上游名称，缓存命中时是请求当时记录的缓存来源，人工录入为 `manual`。无可用来源时返回 `null`。
+
 **请求:**
 ```
 GET /admin/logs?page=1&limit=100&cached=1
@@ -351,6 +354,7 @@ Authorization: Basic YWRtaW46YWRtaW4xMjM=
       "lat": 30.2875,
       "lon": 120.1615,
       "cached": 1,
+      "source": "openstreetmap.org",
       "accessed_at": 1704153600,
       "accessed_at_str": "2024-01-02 10:00:00"
     },
@@ -360,6 +364,7 @@ Authorization: Basic YWRtaW46YWRtaW4xMjM=
       "lat": 31.2304,
       "lon": 121.4737,
       "cached": 0,
+      "source": "photon.komoot.io",
       "accessed_at": 1704153598,
       "accessed_at_str": "2024-01-02 09:59:58"
     }
@@ -383,13 +388,18 @@ Authorization: Basic YWRtaW46YWRtaW4xMjM=
   "data": {
     "upstream_source": "openstreetmap.org",
     "upstream_body": "{\"display_name\":\"浙江省杭州市西湖区\",\"address\":{\"city\":\"杭州市\"}}",
+    "cache_original_source": null,
+    "cache_original_body": null,
+    "cache_original_kind": null,
     "response_status": 200,
     "response_body": "{\"display_name\":\"浙江省杭州市西湖区\",\"address\":{\"city\":\"杭州市\"},\"place_name\":\"杭州市\"}\n"
   }
 }
 ```
 
-两个正文以字符串传递，保留原文格式及数字精度。上游正文来自该次查询最终采用的上游，未经格式转换或短名计算。缓存命中及未采用任何上游结果的请求中，上游字段为 `null`。新的缓存命中只返回 HTTP 状态和摘要，`response_body` 为 `null`。详情适用于已写入访问日志的同步反查，入口拒绝、非法坐标和并发繁忙的提前返回不在此日志内。历史日志仍可查，未曾记录的字段返回 `null`。不存在或已过期的日志返回 404，非法 ID 返回 400。
+正文均以字符串传递，保留原文格式及数字精度。`upstream_body` 是本次查询最终采用的上游正文。缓存命中时它为 `null`，通过 `cache_original_source` 和 `cache_original_body` 查看本次命中的缓存来源。`cache_original_kind` 为 `upstream` 时正文来自填充该缓存版本的上游归档；为 `cache_snapshot` 时是当时的入库数据，包括旧缓存已转换的内容和人工录入。缓存后续修改或删除不会改变历史请求的详情。
+
+新写入日志的 `response_body` 是接口本次实际发送的正文，包括缓存命中和没有采用上游结果的请求。历史记录中未保存的字段返回 `null`。详情适用于已写入访问日志的同步反查，入口拒绝、非法坐标和并发繁忙的提前返回不在此日志内。不存在或已过期的日志返回 404，非法 ID 返回 400。
 
 Go v2 的 `GET /admin/stats/daily` 可传 `days`（1–366，默认 7）。每日统计由仍保留的访问日志与已清理日志的汇总合并，使用服务配置的统计时区。
 

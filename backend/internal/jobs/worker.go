@@ -62,27 +62,27 @@ func (w Worker) process(parent context.Context, task store.Task) error {
 	cached, err := w.Store.Cache(ctx, task.Key)
 	if err == nil {
 		if response, err := cached.Public(); err == nil {
-			return w.Store.Finish(ctx, task, "cached", "", response)
+			return w.Store.Finish(ctx, task, "cached", "", response, 0)
 		}
 	} else if !errors.Is(err, sql.ErrNoRows) {
 		return err
 	}
 	const maxAttempts = 3
 	if task.Attempts > maxAttempts {
-		return w.Store.Finish(ctx, task, "failed", "attempts_exhausted", nil)
+		return w.Store.Finish(ctx, task, "failed", "attempts_exhausted", nil, 0)
 	}
-	response, err := w.Upstream.Batch(ctx, task.Point)
+	response, payload, err := w.Upstream.Batch(ctx, task.Point)
 	updateCtx, stop := context.WithTimeout(parent, 5*time.Second)
 	defer stop()
 	switch {
 	case err == nil:
-		return w.Store.Finish(updateCtx, task, "resolved", "", response)
+		return w.Store.Finish(updateCtx, task, "resolved", "", response, payload.ArchiveID)
 	case errors.Is(err, geocode.ErrNoResult):
-		return w.Store.Finish(updateCtx, task, "no_result", "no_result", nil)
+		return w.Store.Finish(updateCtx, task, "no_result", "no_result", nil, 0)
 	case errors.Is(err, geocode.ErrBatchSourceUnavailable):
-		return w.Store.Finish(updateCtx, task, "failed", "batch_source_unavailable", nil)
+		return w.Store.Finish(updateCtx, task, "failed", "batch_source_unavailable", nil, 0)
 	case task.Attempts >= maxAttempts:
-		return w.Store.Finish(updateCtx, task, "failed", "upstream_unavailable", nil)
+		return w.Store.Finish(updateCtx, task, "failed", "upstream_unavailable", nil, 0)
 	default:
 		next := time.Now().Add(time.Duration(1<<task.Attempts) * 5 * time.Second)
 		var later *geocode.RetryLater

@@ -4,8 +4,8 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>Nominatim Cache · 缓存清单</title>
-  <link rel="stylesheet" href="vendor/tabler.min.css?v=20261126-5">
-  <link rel="stylesheet" href="css/style.css?v=20261126-5">
+  <link rel="stylesheet" href="vendor/tabler.min.css?v=20261126-7">
+  <link rel="stylesheet" href="css/style.css?v=20261126-7">
 </head>
 <body>
   <main class="admin-content">
@@ -46,8 +46,18 @@
       </div>
     </section>
   </div>
-  <script src="js/admin-shell.js?v=20261126-5"></script>
-  <script src="js/api.js?v=20261126-5"></script>
-  <script src="js/cache-list.js?v=20261126-5"></script>
+  <dialog id="cacheDetail" class="request-detail" aria-labelledby="cacheDetailTitle">
+    <header class="request-detail-header">
+      <div><h2 id="cacheDetailTitle" class="h3 mb-1">缓存详情</h2><div id="cacheDetailStatus" class="text-secondary" role="status"></div></div>
+      <form method="dialog"><button class="btn btn-outline-secondary" autofocus>关闭</button></form>
+    </header>
+    <div class="request-detail-panels">
+      <section><h3 class="h4">缓存信息与地点判断</h3><pre id="cacheDetailSummary" tabindex="0"></pre></section>
+      <section><h3 class="h4">缓存保存的原始响应</h3><pre id="cacheDetailOriginal" tabindex="0"></pre></section>
+    </div>
+  </dialog>
+  <script src="js/admin-shell.js?v=20261126-8"></script>
+  <script src="js/api.js?v=20261126-8"></script>
+  <script src="js/cache-list.js?v=20261126-8"></script>
 </body>
 </html>

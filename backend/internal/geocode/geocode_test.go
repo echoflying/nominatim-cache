@@ -74,7 +74,7 @@ func TestUpstreamCompareSharesCooldownWithBatch(t *testing.T) {
 	if len(results) != 1 || results[0].Success {
 		t.Fatalf("unexpected comparison: %+v", results)
 	}
-	_, err = upstream.Batch(t.Context(), point)
+	_, _, err = upstream.Batch(t.Context(), point)
 	var later *RetryLater
 	if !errors.As(err, &later) || requests.Load() != 1 {
 		t.Fatalf("batch ignored upstream cooldown: %v, calls=%d", err, requests.Load())
@@ -117,13 +117,13 @@ func TestArchivesRejectedAndAcceptedUpstreamAttempts(t *testing.T) {
 		return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(`{"display_name":"备用源"}`))}, nil
 	})
 	var archive []UpstreamAttempt
-	upstream.Archive = func(_ context.Context, attempt UpstreamAttempt) error {
+	upstream.Archive = func(_ context.Context, attempt UpstreamAttempt) (int64, error) {
 		archive = append(archive, attempt)
-		return nil
+		return int64(len(archive)), nil
 	}
 	point := Point{Lat: 1, Lon: 2}
 	_, payload, err := upstream.Reverse(t.Context(), point)
-	if err != nil || len(archive) != 2 || !payload.Archived {
+	if err != nil || len(archive) != 2 || payload.ArchiveID != 2 {
 		t.Fatalf("reverse error %v, archived %d attempts", err, len(archive))
 	}
 	if attempt := archive[0]; attempt.Source != "rejected" || attempt.Origin != "reverse" || attempt.Point != point ||
@@ -201,7 +201,7 @@ func TestBatchDistinguishesMissingRouteFromNoResult(t *testing.T) {
 			upstream.client.Transport = roundTrip(func(r *http.Request) (*http.Response, error) {
 				return &http.Response{StatusCode: http.StatusNotFound, Body: io.NopCloser(strings.NewReader(tc.body))}, nil
 			})
-			_, err = upstream.Batch(t.Context(), Point{Lat: 1, Lon: 2})
+			_, _, err = upstream.Batch(t.Context(), Point{Lat: 1, Lon: 2})
 			if err == nil || errors.Is(err, ErrNoResult) != tc.wantMiss {
 				t.Fatalf("unexpected error classification: %v", err)
 			}

@@ -24,6 +24,10 @@ document.addEventListener('DOMContentLoaded', () => {
   const queryCoordsLabel = document.getElementById('queryCoords');
   const queryResultsDiv = document.getElementById('queryResults');
   const selectedDisplayNameInput = document.getElementById('selectedDisplayName');
+  const cacheDetail = document.getElementById('cacheDetail');
+  const cacheDetailStatus = document.getElementById('cacheDetailStatus');
+  const cacheDetailSummary = document.getElementById('cacheDetailSummary');
+  const cacheDetailOriginal = document.getElementById('cacheDetailOriginal');
 
   let currentQueryData = null;
   let selectedResultIndex = 0;
@@ -74,6 +78,7 @@ document.addEventListener('DOMContentLoaded', () => {
         <td>${entry.access_count}</td>
         <td>
           <div class="action-btns">
+            <button class="btn btn-sm btn-outline-secondary detail" data-key="${escapeHtml(entry.cache_key)}">详情</button>
             <button class="btn btn-sm btn-outline-danger delete" data-key="${entry.cache_key}"><span data-icon="trash"></span> 删除</button>
             <button class="btn btn-sm btn-outline-primary query" data-lat="${entry.lat}" data-lon="${entry.lon}"><span data-icon="search"></span> 查上游</button>
           </div>
@@ -85,9 +90,43 @@ document.addEventListener('DOMContentLoaded', () => {
     document.querySelectorAll('.action-btns .delete').forEach(btn => {
       btn.addEventListener('click', () => handleDelete(btn.dataset.key, btn));
     });
+    document.querySelectorAll('.action-btns .detail').forEach(btn => {
+      btn.addEventListener('click', () => handleShowCacheDetail(btn.dataset.key));
+    });
     document.querySelectorAll('.action-btns .query').forEach(btn => {
       btn.addEventListener('click', () => handleQueryUpstream(parseFloat(btn.dataset.lat), parseFloat(btn.dataset.lon)));
     });
+  }
+
+  async function handleShowCacheDetail(key) {
+    cacheDetailStatus.textContent = `${key} · 正在读取`;
+    cacheDetailSummary.textContent = '';
+    cacheDetailOriginal.textContent = '';
+    cacheDetail.showModal();
+    try {
+      const entry = await api.getCacheDetail(key);
+      if (!cacheDetail.open) return;
+      cacheDetailStatus.textContent = `${entry.source ? getSourceLabel(entry.source) : '来源未记录'} · ${entry.place_quality ? getPlaceQualityLabel(entry.place_quality) : '质量未记录'}`;
+      cacheDetailSummary.textContent = formatJSON(JSON.stringify({
+        cache_key: entry.cache_key,
+        coordinates: { lat: entry.lat, lon: entry.lon },
+        source: entry.source,
+        place_name: entry.place_name || '',
+        place_level: entry.place_level || '',
+        place_quality: entry.place_quality || '',
+        place_source_field: entry.place_source_field || '',
+        display_name: entry.display_name,
+        address: parseJSONValue(entry.address),
+        first_cached_at: entry.first_cached_at,
+        last_accessed_at: entry.last_accessed_at,
+        access_count: entry.access_count
+      }));
+      cacheDetailOriginal.textContent = formatJSON(JSON.stringify(entry.nominatim_response));
+    } catch (error) {
+      if (!cacheDetail.open) return;
+      cacheDetailStatus.textContent = `读取失败 · ${error.message}`;
+      cacheDetailSummary.textContent = '无法读取缓存详情。';
+    }
   }
 
   // 更新分页
@@ -237,6 +276,42 @@ document.addEventListener('DOMContentLoaded', () => {
     const div = document.createElement('div');
     div.textContent = text;
     return div.innerHTML;
+  }
+
+  function formatJSON(text) {
+    try {
+      JSON.parse(text);
+    } catch {
+      return text;
+    }
+    const tokens = text.match(/"(?:\\[\s\S]|[^"\\])*"|[{}\[\],:]|[^\s{}\[\],:"]+/g);
+    const parts = [];
+    let depth = 0;
+    const lineBreak = () => parts.push('\n', '  '.repeat(depth));
+    for (let i = 0; i < tokens.length; i++) {
+      const token = tokens[i];
+      switch (token) {
+        case '{': case '[':
+          parts.push(token);
+          if (++depth > 32) return text;
+          if (tokens[i + 1] !== (token === '{' ? '}' : ']')) lineBreak();
+          break;
+        case '}': case ']':
+          depth--;
+          if (tokens[i - 1] !== (token === '}' ? '{' : '[')) lineBreak();
+          parts.push(token);
+          break;
+        case ',': parts.push(','); lineBreak(); break;
+        case ':': parts.push(': '); break;
+        default: parts.push(token);
+      }
+    }
+    return parts.join('');
+  }
+
+  function parseJSONValue(value) {
+    if (typeof value !== 'string') return value;
+    try { return JSON.parse(value); } catch { return value; }
   }
 
   // 添加到缓存

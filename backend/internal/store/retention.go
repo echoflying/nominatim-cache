@@ -8,13 +8,16 @@ import (
 	"github.com/echoflying/nominatim-cache/backend/internal/geocode"
 )
 
-func (s Store) ArchiveUpstream(ctx context.Context, a geocode.UpstreamAttempt) error {
-	_, err := s.DB.ExecContext(ctx, `INSERT INTO upstream_archive
+func (s Store) ArchiveUpstream(ctx context.Context, a geocode.UpstreamAttempt) (int64, error) {
+	result, err := s.DB.ExecContext(ctx, `INSERT INTO upstream_archive
 		(accessed_at,origin,source,lat,lon,upstream_status,response_body,incomplete,error_message)
 		VALUES (?,?,?,?,?,NULLIF(?,0),?,?,NULLIF(?,''))`,
 		a.StartedAt.UnixMilli(), a.Origin, a.Source, a.Point.Lat, a.Point.Lon,
 		a.Status, a.Body, a.Incomplete, a.Error)
-	return err
+	if err != nil {
+		return 0, err
+	}
+	return result.LastInsertId()
 }
 
 // Aggregate and remove the same set of rows atomically, including when maintenance resumes after a restart.

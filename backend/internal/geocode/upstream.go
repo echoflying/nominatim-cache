@@ -47,7 +47,7 @@ type Upstream struct {
 	batch    *source
 	interval time.Duration
 	sequence atomic.Uint64
-	Archive  func(context.Context, UpstreamAttempt) error
+	Archive  func(context.Context, UpstreamAttempt) (int64, error)
 }
 
 func NewUpstream(configs []SourceConfig, batch *SourceConfig, interval, timeout time.Duration) (*Upstream, error) {
@@ -95,17 +95,19 @@ func NewUpstream(configs []SourceConfig, batch *SourceConfig, interval, timeout 
 
 func (u *Upstream) HasBatchSource() bool { return u.batch != nil }
 
-func (u *Upstream) Batch(ctx context.Context, point Point) (Response, error) {
+func (u *Upstream) Batch(ctx context.Context, point Point) (Response, UpstreamPayload, error) {
+	var payload UpstreamPayload
 	if u.batch == nil {
-		return nil, ErrBatchSourceUnavailable
+		return nil, payload, ErrBatchSourceUnavailable
 	}
-	return u.request(ctx, *u.batch, point, true, nil, "batch")
+	response, err := u.request(ctx, *u.batch, point, true, &payload, "batch")
+	return response, payload, err
 }
 
 type UpstreamPayload struct {
-	Source   string
-	Body     []byte
-	Archived bool
+	Source    string
+	Body      []byte
+	ArchiveID int64
 }
 
 type UpstreamAttempt struct {
@@ -206,10 +208,10 @@ func (u *Upstream) request(ctx context.Context, src source, point Point, wait bo
 		}
 		recordCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), time.Second)
 		defer cancel()
-		if err := u.Archive(recordCtx, *recorded); err != nil {
+		if id, err := u.Archive(recordCtx, *recorded); err != nil {
 			slog.Error("保存上游查询归档失败", "source", recorded.Source, "origin", origin, "error", err)
 		} else if payload != nil && resultErr == nil {
-			payload.Archived = true
+			payload.ArchiveID = id
 		}
 	}()
 	g := src.gate
