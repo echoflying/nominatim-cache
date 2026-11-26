@@ -12,6 +12,8 @@ SQL 迁移单独运行。旧 SQLite 在线快照通过迁移命令导入专用�
 
 浏览器通过 `/ops/nominatim/` 访问管理后台。Nginx 用共享 OPS `auth_request` 校验会话、项目权限和写操作来源，再去掉路径前缀并在服务端使用 Nominatim 的管理凭据访问回环端口。浏览器只使用 OPS Cookie，Cookie 不传给 Nominatim。管理界面用相对路径加载静态文件和 API。SSH 隧道保留独立的 Basic Auth 登录。
 
+管理页沿用 KML3D 后台的 Tabler 外壳：左侧分组导航、顶部栏、主内容区和响应式侧栏，首页展示统计卡片与 7 天趋势，另设缓存清单和最近请求页。所有界面图标使用本地内联 Tabler SVG；Tabler 基础样式随前端静态文件发布，管理页不依赖外部 CDN。
+
 ## 一、项目概述
 
 ### 1.1 项目背景

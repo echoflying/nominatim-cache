@@ -120,9 +120,11 @@ func (s Server) AdminHandler() http.Handler {
 	routes.HandleFunc("GET /admin/stats/daily", s.admin(s.daily))
 	routes.HandleFunc("GET /{$}", s.asset("index.html"))
 	routes.HandleFunc("GET /list.html", s.asset("list.html"))
+	routes.HandleFunc("GET /requests.html", s.asset("requests.html"))
 	static := http.FileServer(http.Dir(s.Config.Frontend))
 	routes.Handle("GET /css/", static)
 	routes.Handle("GET /js/", static)
+	routes.Handle("GET /vendor/", static)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		securityHeaders(w)
 		routes.ServeHTTP(w, r)

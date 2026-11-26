@@ -1,84 +1,52 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="zh-CN">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Nominatim 缓存服务 - 缓存清单</title>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Nominatim Cache · 缓存清单</title>
+  <link rel="stylesheet" href="vendor/tabler.min.css">
   <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
-  <div class="container">
-    <header class="header">
-      <a href="./" class="back-link">← 返回 Dashboard</a>
-      <h1>缓存清单</h1>
+  <main class="admin-content">
+    <header class="page-heading">
+      <div><h1>缓存清单</h1><p class="text-secondary mb-0">搜索、检查并维护已缓存的地点</p></div>
+      <button class="btn btn-outline-secondary" id="refreshBtn"><span data-icon="refresh"></span> 刷新</button>
     </header>
-
-     <section class="card">
-       <div class="toolbar">
-         <input type="text" id="searchInput" placeholder="搜索地名..." class="search-input">
-         <button class="btn btn-primary" id="searchBtn">搜索</button>
-         <div class="sort-group">
-           <button class="btn btn-sort active" id="sortAccessed">最近访问</button>
-           <button class="btn btn-sort" id="sortCached">首次缓存</button>
-         </div>
-         <button class="btn btn-secondary" id="refreshBtn">刷新</button>
-       </div>
-
-      <div class="table-container">
-        <table class="data-table">
-           <thead>
-             <tr>
-               <th>坐标</th>
-               <th>地名</th>
-               <th>类型</th>
-               <th>来源</th>
-               <th id="timeColumnHeader">最近访问</th>
-               <th>访问次</th>
-               <th>操作</th>
-             </tr>
-           </thead>
-          <tbody id="cacheTableBody">
-            <tr>
-              <td colspan="7" class="loading">加载中...</td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-
-      <div class="pagination">
-        <button class="btn btn-sm" id="prevBtn" disabled>上一页</button>
-        <span id="pageInfo">第 1 页 / 共 0 页</span>
-        <button class="btn btn-sm" id="nextBtn" disabled>下一页</button>
-      </div>
-    </section>
-
-    <footer class="footer">
-      <p>Powered by Nominatim Cache Service</p>
-    </footer>
-  </div>
-
-  <!-- 查询上游模态框 -->
-  <div id="queryModal" class="modal">
-    <div class="modal-content">
-      <div class="modal-header">
-        <h2>查询上游</h2>
-        <button class="modal-close" id="closeQueryModal">&times;</button>
-      </div>
-      <div class="modal-body">
-        <p id="queryCoords" class="coords-label"></p>
-        <div id="queryResults" class="results-list"></div>
-        <div class="form-group">
-          <label>地名:</label>
-          <textarea id="selectedDisplayName" rows="3" class="full-width"></textarea>
+    <section class="card data-card">
+      <div class="toolbar">
+        <div class="input-icon search-control"><span class="input-icon-addon" data-icon="search"></span><input type="search" id="searchInput" placeholder="搜索地名或地址" class="form-control"></div>
+        <button class="btn btn-primary" id="searchBtn"><span data-icon="search"></span> 搜索</button>
+        <div class="sort-group" role="group" aria-label="排序方式">
+          <button class="btn btn-outline-secondary active" id="sortAccessed"><span data-icon="clock"></span> 最近访问</button>
+          <button class="btn btn-outline-secondary" id="sortCached"><span data-icon="calendar"></span> 首次缓存</button>
         </div>
       </div>
-      <div class="modal-footer">
-        <button class="btn btn-primary" id="addToCacheBtn">添加到缓存</button>
-        <button class="btn btn-secondary" id="cancelQueryBtn">取消</button>
+      <div class="table-responsive">
+        <table class="table table-vcenter table-hover data-table">
+          <thead><tr><th>坐标</th><th>地点与地址</th><th>类型</th><th>来源</th><th id="timeColumnHeader">最近访问</th><th>访问次数</th><th class="text-end">操作</th></tr></thead>
+          <tbody id="cacheTableBody"><tr><td colspan="7" class="table-loading">加载中...</td></tr></tbody>
+        </table>
       </div>
-    </div>
-  </div>
+      <div class="pagination-bar">
+        <span class="text-secondary" id="pageInfo">第 1 页 / 共 0 页</span>
+        <div class="btn-list"><button class="btn btn-outline-secondary btn-sm" id="prevBtn" disabled><span data-icon="chevron-left"></span> 上一页</button><button class="btn btn-outline-secondary btn-sm" id="nextBtn" disabled>下一页 <span data-icon="chevron-right"></span></button></div>
+      </div>
+    </section>
+    <footer class="admin-footer">Nominatim Cache <span>地点反查与缓存管理</span></footer>
+  </main>
 
+  <div id="queryModal" class="modal" aria-hidden="true">
+    <div class="modal-backdrop" data-modal-close></div>
+    <section class="modal-dialog modal-dialog-centered" role="dialog" aria-modal="true" aria-labelledby="queryModalTitle">
+      <div class="modal-content">
+        <header class="modal-header"><div><h2 id="queryModalTitle" class="modal-title">查询上游</h2><p id="queryCoords" class="text-secondary small mb-0"></p></div><button class="btn btn-icon btn-ghost-secondary" id="closeQueryModal" aria-label="关闭"><span data-icon="x"></span></button></header>
+        <div class="modal-body"><div id="queryResults" class="results-list"></div><div class="mb-3"><label for="selectedDisplayName" class="form-label">缓存地名</label><textarea id="selectedDisplayName" rows="3" class="form-control"></textarea></div></div>
+        <footer class="modal-footer"><button class="btn btn-primary" id="addToCacheBtn"><span data-icon="database-plus"></span> 保存到缓存</button><button class="btn btn-outline-secondary" id="cancelQueryBtn">取消</button></footer>
+      </div>
+    </section>
+  </div>
+  <script src="js/admin-shell.js"></script>
   <script src="js/api.js"></script>
   <script src="js/cache-list.js"></script>
 </body>

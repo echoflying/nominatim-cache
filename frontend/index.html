@@ -1,58 +1,37 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="zh-CN">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Nominatim 缓存服务 - Dashboard</title>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Nominatim Cache · 概览</title>
+  <link rel="stylesheet" href="vendor/tabler.min.css">
   <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
-  <div class="container">
-    <header class="header">
-      <h1>Nominatim 缓存服务</h1>
-      <div class="stats-badge" id="cacheCount">缓存: 加载中...</div>
+  <main class="admin-content">
+    <header class="page-heading">
+      <div><h1>服务概览</h1><p class="text-secondary mb-0">查看地点缓存与服务访问情况</p></div>
+      <div class="heading-actions">
+        <a href="list.html" class="btn btn-primary">查看缓存清单 <span data-icon="arrow-right"></span></a>
+        <button class="btn btn-outline-secondary" id="refreshBtn"><span data-icon="refresh"></span> 刷新</button>
+        <button class="btn btn-outline-danger" id="clearCacheBtn"><span data-icon="trash"></span> 清空缓存</button>
+      </div>
     </header>
 
-    <section class="card">
-      <h2>访问统计</h2>
-      <div class="stats-grid">
-        <div class="stat-item">
-          <div class="stat-value" id="totalRequests">-</div>
-          <div class="stat-label">总请求数</div>
-        </div>
-        <div class="stat-item">
-          <div class="stat-value" id="cacheHits">-</div>
-          <div class="stat-label">缓存命中</div>
-        </div>
-        <div class="stat-item">
-          <div class="stat-value" id="cacheMisses">-</div>
-          <div class="stat-label">缓存未命中</div>
-        </div>
-        <div class="stat-item">
-          <div class="stat-value highlight" id="hitRate">-</div>
-          <div class="stat-label">命中率</div>
-        </div>
-      </div>
+    <section class="stats-grid" aria-label="缓存与访问统计">
+      <article class="card stat-card"><span class="stat-icon blue" data-icon="database"></span><div><div class="stat-label">缓存地点</div><strong class="stat-value" id="cacheCount">-</strong></div></article>
+      <article class="card stat-card"><span class="stat-icon azure" data-icon="activity"></span><div><div class="stat-label">累计请求</div><strong class="stat-value" id="totalRequests">-</strong></div></article>
+      <article class="card stat-card"><span class="stat-icon green" data-icon="circle-check"></span><div><div class="stat-label">缓存命中</div><strong class="stat-value" id="cacheHits">-</strong></div></article>
+      <article class="card stat-card"><span class="stat-icon orange" data-icon="chart-bar"></span><div><div class="stat-label">缓存命中率</div><strong class="stat-value" id="hitRate">-</strong><span class="stat-footnote">未命中 <span id="cacheMisses">-</span></span></div></article>
     </section>
 
-    <section class="card">
-      <h2>7 天趋势</h2>
-      <div class="chart-container" style="height: 380px;">
-        <canvas id="trendChart"></canvas>
-      </div>
+    <section class="card trend-card">
+      <div class="card-header"><div><h2 class="card-title">近 7 天请求趋势</h2><div class="text-secondary small">命中与未命中请求</div></div><a class="btn btn-sm btn-outline-secondary" href="requests.html"><span data-icon="list-details"></span> 最近请求</a></div>
+      <div class="chart-container"><canvas id="trendChart" aria-label="近七天缓存命中与未命中趋势"></canvas></div>
     </section>
-
-    <section class="actions">
-      <a href="list.html" class="btn btn-primary">查看缓存清单</a>
-      <button class="btn btn-danger" id="clearCacheBtn">清空缓存</button>
-      <button class="btn btn-secondary" id="refreshBtn">刷新</button>
-    </section>
-
-    <footer class="footer">
-      <p>Powered by Nominatim Cache Service</p>
-    </footer>
-  </div>
-
+    <footer class="admin-footer">Nominatim Cache <span>地点反查与缓存管理</span></footer>
+  </main>
+  <script src="js/admin-shell.js"></script>
   <script src="js/api.js"></script>
   <script src="js/dashboard.js"></script>
 </body>

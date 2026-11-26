@@ -32,7 +32,7 @@ document.addEventListener('DOMContentLoaded', () => {
    // 加载缓存列表
    async function loadCacheList() {
      try {
-       tableBody.innerHTML = '<tr><td colspan="7" class="loading">加载中...</td></tr>';
+       tableBody.innerHTML = '<tr><td colspan="7" class="table-loading">加载中...</td></tr>';
 
        const result = await api.getCacheList({
          page: currentPage,
@@ -47,14 +47,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
      } catch (error) {
        console.error('加载列表失败:', error);
-       tableBody.innerHTML = `<tr><td colspan="7" class="loading">加载失败: ${error.message}</td></tr>`;
+       tableBody.innerHTML = `<tr><td colspan="7" class="table-loading">加载失败: ${error.message}</td></tr>`;
      }
    }
 
   // 渲染表格
   function renderTable(data) {
     if (!data || data.length === 0) {
-      tableBody.innerHTML = '<tr><td colspan="7" class="loading">暂无缓存数据</td></tr>';
+      tableBody.innerHTML = '<tr><td colspan="7" class="table-loading">暂无缓存数据</td></tr>';
       return;
     }
 
@@ -74,18 +74,18 @@ document.addEventListener('DOMContentLoaded', () => {
         <td>${entry.access_count}</td>
         <td>
           <div class="action-btns">
-            <button class="action-btn delete" data-key="${entry.cache_key}">删除</button>
-            <button class="action-btn query" data-lat="${entry.lat}" data-lon="${entry.lon}">查询上游</button>
+            <button class="btn btn-sm btn-outline-danger delete" data-key="${entry.cache_key}"><span data-icon="trash"></span> 删除</button>
+            <button class="btn btn-sm btn-outline-primary query" data-lat="${entry.lat}" data-lon="${entry.lon}"><span data-icon="search"></span> 查上游</button>
           </div>
         </td>
       </tr>
     `}).join('');
 
     // 绑定事件
-    document.querySelectorAll('.action-btn.delete').forEach(btn => {
+    document.querySelectorAll('.action-btns .delete').forEach(btn => {
       btn.addEventListener('click', () => handleDelete(btn.dataset.key, btn));
     });
-    document.querySelectorAll('.action-btn.query').forEach(btn => {
+    document.querySelectorAll('.action-btns .query').forEach(btn => {
       btn.addEventListener('click', () => handleQueryUpstream(parseFloat(btn.dataset.lat), parseFloat(btn.dataset.lon)));
     });
   }
@@ -171,6 +171,7 @@ document.addEventListener('DOMContentLoaded', () => {
       queryResultsDiv.innerHTML = '<p class="loading">查询所有上游源中...</p>';
       selectedDisplayNameInput.value = '';
       modal.classList.add('show');
+      modal.setAttribute('aria-hidden', 'false');
 
       const result = await api.queryUpstream(lat, lon);
 
@@ -267,6 +268,7 @@ document.addEventListener('DOMContentLoaded', () => {
   // 关闭模态框
   function closeModal() {
     modal.classList.remove('show');
+    modal.setAttribute('aria-hidden', 'true');
     currentQueryData = null;
     selectedResultIndex = 0;
     selectedAddress = {};
@@ -316,7 +318,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // 点击模态框外部关闭
   modal.addEventListener('click', (e) => {
-    if (e.target === modal) {
+    if (e.target === modal || e.target.matches('[data-modal-close]')) {
       closeModal();
     }
   });

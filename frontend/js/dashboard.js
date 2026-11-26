@@ -16,7 +16,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     try {
       const stats = await api.getStats();
 
-      cacheCountEl.textContent = `缓存: ${formatNumber(stats.cache_count)}`;
+      cacheCountEl.textContent = formatNumber(stats.cache_count);
       totalRequestsEl.textContent = formatNumber(stats.total_requests);
       cacheHitsEl.textContent = formatNumber(stats.cache_hits);
       cacheMissesEl.textContent = formatNumber(stats.cache_misses);
@@ -51,13 +51,13 @@ document.addEventListener('DOMContentLoaded', async () => {
       const maxValue = Math.max(maxHits, maxMisses) * 1.3;
 
       // 绘制命中柱
-      ctx.fillStyle = '#28a745';
+      ctx.fillStyle = '#2fb344';
       days.forEach((_, i) => {
         const x = 50 + i * ((canvas.width - 100) / 7) + 5;
         const height = (hits[i] / maxValue) * (canvas.height - 60);
         ctx.fillRect(x, canvas.height - 40 - height, barWidth, height);
         if (hits[i] > 0) {
-          ctx.fillStyle = '#28a745';
+          ctx.fillStyle = '#2fb344';
           ctx.font = '10px sans-serif';
           ctx.textAlign = 'center';
           ctx.fillText(hits[i].toString(), x + barWidth / 2, canvas.height - 40 - height - 5);
@@ -65,13 +65,13 @@ document.addEventListener('DOMContentLoaded', async () => {
       });
 
       // 绘制未命中柱
-      ctx.fillStyle = '#cb2431';
+      ctx.fillStyle = '#d63939';
       days.forEach((_, i) => {
         const x = 50 + i * ((canvas.width - 100) / 7) + barWidth + 10;
         const height = (misses[i] / maxValue) * (canvas.height - 60);
         ctx.fillRect(x, canvas.height - 40 - height, barWidth, height);
         if (misses[i] > 0) {
-          ctx.fillStyle = '#cb2431';
+          ctx.fillStyle = '#d63939';
           ctx.font = '10px sans-serif';
           ctx.textAlign = 'center';
           ctx.fillText(misses[i].toString(), x + barWidth / 2, canvas.height - 40 - height - 5);
@@ -79,7 +79,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       });
 
       // X 轴标签
-      ctx.fillStyle = '#586069';
+      ctx.fillStyle = '#6c7a91';
       ctx.font = '12px sans-serif';
       days.forEach((day, i) => {
         const x = 50 + i * ((canvas.width - 100) / 7) + 20;
@@ -95,11 +95,11 @@ document.addEventListener('DOMContentLoaded', async () => {
       legendDiv.style.cssText = 'position:absolute; top:5px; right:5px; font-size:12px; display:flex; flex-direction:column; gap:2px;';
       legendDiv.innerHTML = `
         <div style="display:flex; align-items:center; gap:4px;">
-          <div style="width:10px; height:10px; background:#28a745;"></div>
+          <div style="width:10px; height:10px; background:#2fb344;"></div>
           <span>命中</span>
         </div>
         <div style="display:flex; align-items:center; gap:4px;">
-          <div style="width:10px; height:10px; background:#cb2431;"></div>
+          <div style="width:10px; height:10px; background:#d63939;"></div>
           <span>未命中</span>
         </div>
       `;
