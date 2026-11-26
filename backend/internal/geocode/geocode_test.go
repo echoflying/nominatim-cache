@@ -102,6 +102,40 @@ func TestPhotonResult(t *testing.T) {
 	}
 }
 
+func TestArchivesRejectedAndAcceptedUpstreamAttempts(t *testing.T) {
+	upstream, err := NewUpstream([]SourceConfig{
+		{Name: "rejected", URL: "https://rejected.example.test/reverse"},
+		{Name: "accepted", URL: "https://accepted.example.test/reverse"},
+	}, nil, time.Second, time.Second)
+	if err != nil {
+		t.Fatal(err)
+	}
+	upstream.client.Transport = roundTrip(func(r *http.Request) (*http.Response, error) {
+		if r.URL.Host == "rejected.example.test" {
+			return &http.Response{StatusCode: http.StatusBadGateway, Body: io.NopCloser(strings.NewReader("gateway error"))}, nil
+		}
+		return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(`{"display_name":"备用源"}`))}, nil
+	})
+	var archive []UpstreamAttempt
+	upstream.Archive = func(_ context.Context, attempt UpstreamAttempt) error {
+		archive = append(archive, attempt)
+		return nil
+	}
+	point := Point{Lat: 1, Lon: 2}
+	_, payload, err := upstream.Reverse(t.Context(), point)
+	if err != nil || len(archive) != 2 || !payload.Archived {
+		t.Fatalf("reverse error %v, archived %d attempts", err, len(archive))
+	}
+	if attempt := archive[0]; attempt.Source != "rejected" || attempt.Origin != "reverse" || attempt.Point != point ||
+		attempt.Status != 502 || string(attempt.Body) != "gateway error" || attempt.Error == "" {
+		t.Fatalf("unexpected failed attempt: %+v", attempt)
+	}
+	if attempt := archive[1]; attempt.Source != "accepted" || attempt.Status != 200 || attempt.Error != "" ||
+		string(attempt.Body) != `{"display_name":"备用源"}` {
+		t.Fatalf("unexpected accepted attempt: %+v", attempt)
+	}
+}
+
 func TestReverseUsesReadyBackupWhenFirstSourceIsBusy(t *testing.T) {
 	upstream, err := NewUpstream([]SourceConfig{
 		{Name: "busy", URL: "https://busy.example.test/reverse"},

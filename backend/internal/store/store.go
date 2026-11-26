@@ -247,8 +247,9 @@ func (s Store) RecordAccess(ctx context.Context, p geocode.Point, key string, hi
 	if err != nil {
 		return err
 	}
-	if _, err := tx.ExecContext(ctx, "INSERT INTO access_log_responses (access_log_id,upstream_source,upstream_body,response_status,response_body) VALUES (?,NULLIF(?,''),?,?,?)",
-		id, upstream.Source, upstream.Body, status, output); err != nil {
+	if _, err := tx.ExecContext(ctx, `INSERT INTO access_log_responses
+		(access_log_id,upstream_source,upstream_body,response_status,response_body,upstream_archived)
+		VALUES (?,NULLIF(?,''),?,?,?,?)`, id, upstream.Source, upstream.Body, status, output, upstream.Archived); err != nil {
 		return err
 	}
 	if _, err := tx.ExecContext(ctx, "UPDATE stats SET total_requests=total_requests+1, cache_hits=cache_hits+?, cache_misses=cache_misses+?, last_updated_at=? WHERE id=1",
@@ -277,7 +278,7 @@ type AccessLogDetail struct {
 
 func (s Store) LogDetail(ctx context.Context, id int64) (AccessLogDetail, error) {
 	var result AccessLogDetail
-	err := s.DB.QueryRowContext(ctx, `SELECT r.upstream_source,r.upstream_body,r.response_status,r.response_body
+	err := s.DB.QueryRowContext(ctx, `SELECT r.upstream_source,r.upstream_body,r.response_status,NULLIF(r.response_body,'')
 		FROM access_logs l LEFT JOIN access_log_responses r ON r.access_log_id=l.id WHERE l.id=?`, id).
 		Scan(&result.UpstreamSource, &result.UpstreamBody, &result.ResponseStatus, &result.ResponseBody)
 	return result, err
@@ -319,15 +320,18 @@ type Day struct {
 	Total  int64  `json:"total"`
 }
 
-func (s Store) Daily(ctx context.Context, now time.Time) ([]Day, error) {
+func (s Store) Daily(ctx context.Context, now time.Time, days int) ([]Day, error) {
 	y, m, d := now.Date()
-	start := time.Date(y, m, d, 0, 0, 0, 0, now.Location()).AddDate(0, 0, -6)
-	result := make([]Day, 0, 7)
-	for range 7 {
+	start := time.Date(y, m, d, 0, 0, 0, 0, now.Location()).AddDate(0, 0, 1-days)
+	result := make([]Day, 0, days)
+	for range days {
 		end := start.AddDate(0, 0, 1)
 		item := Day{Date: start.Format(time.DateOnly), Label: fmt.Sprintf("%d/%d", start.Month(), start.Day())}
-		err := s.DB.QueryRowContext(ctx, "SELECT COUNT(*),COALESCE(SUM(cached=1),0) FROM access_logs WHERE accessed_at>=? AND accessed_at<?",
-			start.UnixMilli(), end.UnixMilli()).Scan(&item.Total, &item.Hits)
+		err := s.DB.QueryRowContext(ctx, `SELECT
+			COUNT(*) + COALESCE((SELECT total FROM access_daily_rollups WHERE day=?),0),
+			COALESCE(SUM(cached=1),0) + COALESCE((SELECT hits FROM access_daily_rollups WHERE day=?),0)
+			FROM access_logs WHERE accessed_at>=? AND accessed_at<?`,
+			item.Date, item.Date, start.UnixMilli(), end.UnixMilli()).Scan(&item.Total, &item.Hits)
 		if err != nil {
 			return nil, err
 		}
@@ -339,26 +343,23 @@ func (s Store) Daily(ctx context.Context, now time.Time) ([]Day, error) {
 }
 
 func (s Store) Prune(ctx context.Context, now time.Time, logRetention, batchRetention time.Duration) error {
-	for _, deletion := range []struct {
-		query string
-		age   time.Duration
-	}{
-		{"DELETE FROM access_logs WHERE accessed_at<? ORDER BY accessed_at LIMIT 5000", logRetention},
-		{"DELETE FROM batch_jobs WHERE finished_at<? ORDER BY finished_at LIMIT 50", batchRetention},
-	} {
-		for {
-			result, err := s.DB.ExecContext(ctx, deletion.query, now.Add(-deletion.age).UnixMilli())
-			if err != nil {
-				return err
-			}
-			count, err := result.RowsAffected()
-			if err != nil {
-				return err
-			}
-			if count == 0 {
-				break
-			}
+	for {
+		count, err := s.rollUpAccessLogs(ctx, now.Add(-logRetention))
+		if err != nil {
+			return err
+		}
+		if count == 0 {
+			break
 		}
 	}
-	return nil
+	for {
+		result, err := s.DB.ExecContext(ctx, "DELETE FROM batch_jobs WHERE finished_at<? ORDER BY finished_at LIMIT 50", now.Add(-batchRetention).UnixMilli())
+		if err != nil {
+			return err
+		}
+		count, err := result.RowsAffected()
+		if err != nil || count == 0 {
+			return err
+		}
+	}
 }

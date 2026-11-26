@@ -70,6 +70,7 @@ func run() error {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	storage := store.Store{DB: db}
+	upstream.Archive = storage.ArchiveUpstream
 	locks := &geocode.KeyLocks{}
 	wake := make(chan struct{}, 1)
 	app := httpapi.Server{Config: cfg, Store: storage, Upstream: upstream, Locks: locks, Wake: wake,
@@ -105,7 +106,7 @@ func run() error {
 	pruneDone := make(chan struct{})
 	go func() {
 		defer close(pruneDone)
-		prune(ctx, storage, cfg.LogRetention)
+		prune(ctx, storage, cfg.LogRetention, cfg.Location)
 	}()
 	serveErr := make(chan error, len(endpoints))
 	for i, endpoint := range endpoints {
@@ -142,7 +143,7 @@ func run() error {
 	return err
 }
 
-func prune(ctx context.Context, storage store.Store, logRetention time.Duration) {
+func prune(ctx context.Context, storage store.Store, logRetention time.Duration, location *time.Location) {
 	ticker := time.NewTicker(time.Hour)
 	defer ticker.Stop()
 	for {
@@ -151,7 +152,7 @@ func prune(ctx context.Context, storage store.Store, logRetention time.Duration)
 			return
 		case now := <-ticker.C:
 			maintenance, cancel := context.WithTimeout(ctx, time.Minute)
-			if err := storage.Prune(maintenance, now, logRetention, 7*24*time.Hour); err != nil && ctx.Err() == nil {
+			if err := storage.Prune(maintenance, now.In(location), logRetention, 7*24*time.Hour); err != nil && ctx.Err() == nil {
 				slog.Warn("清理过期日志与批次失败", "error", err)
 			}
 			cancel()

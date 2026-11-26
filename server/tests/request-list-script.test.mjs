@@ -196,10 +196,10 @@ test('page polls while visible and pauses when hidden', async () => {
   assert.equal(harness.intervals.size, 1);
 });
 
-test('response details load only on click and display the original text', async () => {
+test('response details format JSON on click without rounding numbers or changing plain text', async () => {
   const entry = { id: 42, cached: false, cache_key: '1.0000_2.0000' };
-  const raw = '{"upstream_id":12345678901234567890,"value":"<example>"}';
-  const output = '{"place_name":"地点"}\n';
+  let raw = '{"upstream_id":12345678901234567890,"value":"<example>","extra":[]}';
+  const output = '{"address":{"neighbourhood":"后海"},"lat":"22.5109709","place_name":"后海"}\n';
   const calls = [];
   const harness = createHarness(async () => ({ data: [entry] }), async id => {
     calls.push(id);
@@ -216,6 +216,17 @@ test('response details load only on click and display the original text', async 
   assert.deepEqual(calls, ['42']);
   assert.equal(harness.elements.requestDetail.open, true);
   assert.equal(harness.elements.requestDetailStatus.textContent, '请求 #42 · photon.komoot.io · HTTP 200');
+  assert.equal(harness.elements.requestUpstream.textContent, [
+    '{', '  "upstream_id": 12345678901234567890,', '  "value": "<example>",', '  "extra": []', '}'
+  ].join('\n'));
+  assert.equal(harness.elements.requestOutput.textContent, [
+    '{', '  "address": {', '    "neighbourhood": "后海"', '  },', '  "lat": "22.5109709",', '  "place_name": "后海"', '}'
+  ].join('\n'));
+
+  raw = '  <html>上游错误</html>\n';
+  harness.elements.requestDetail.open = false;
+  await harness.elements.requestTableBody.trigger('click', {
+    target: { closest: () => ({ dataset: { logId: '42', cached: '0' } }) }
+  });
   assert.equal(harness.elements.requestUpstream.textContent, raw);
-  assert.equal(harness.elements.requestOutput.textContent, output);
 });

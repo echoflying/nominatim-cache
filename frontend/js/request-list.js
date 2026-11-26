@@ -72,18 +72,59 @@ document.addEventListener('DOMContentLoaded', () => {
       if (data.response_status != null) labels.push(`HTTP ${data.response_status}`);
       detailStatus.textContent = labels.join(' · ');
       if (data.response_body == null) {
-        upstream.textContent = '历史记录未保存上游响应。';
-        output.textContent = '历史记录未保存最终输出。';
+        const cacheSummary = button.dataset.cached === '1' && data.response_status != null;
+        upstream.textContent = cacheSummary ? '本次命中缓存，未请求上游。' : '历史记录未保存上游响应。';
+        output.textContent = cacheSummary ? '缓存命中仅保留状态与访问摘要。' : '历史记录未保存最终输出。';
         return;
       }
-      upstream.textContent = data.upstream_body ?? (button.dataset.cached === '1'
-        ? '本次命中缓存，未请求上游。'
-        : '本次未采用上游结果。');
-      output.textContent = data.response_body;
+      const noUpstream = button.dataset.cached === '1' ? '本次命中缓存，未请求上游。' : '本次未采用上游结果。';
+      upstream.textContent = data.upstream_body == null ? noUpstream : formatJSON(data.upstream_body);
+      output.textContent = formatJSON(data.response_body);
     } catch (error) {
       if (load !== detailLoad || !detail.open) return;
       detailStatus.textContent = `请求 #${id} · ${error.message}`;
     }
+  }
+
+  function formatJSON(text) {
+    try {
+      JSON.parse(text);
+    } catch {
+      return text;
+    }
+
+    // Tokenize the original text so large numbers and string escapes survive formatting.
+    const tokens = text.match(/"(?:\\[\s\S]|[^"\\])*"|[{}\[\],:]|[^\s{}\[\],:"]+/g);
+    const parts = [];
+    let depth = 0;
+    const lineBreak = () => parts.push('\n', '  '.repeat(depth));
+    for (let i = 0; i < tokens.length; i++) {
+      const token = tokens[i];
+      switch (token) {
+        case '{':
+        case '[':
+          parts.push(token);
+          if (++depth > 32) return text;
+          if (tokens[i + 1] !== (token === '{' ? '}' : ']')) lineBreak();
+          break;
+        case '}':
+        case ']':
+          depth--;
+          if (tokens[i - 1] !== (token === '}' ? '{' : '[')) lineBreak();
+          parts.push(token);
+          break;
+        case ',':
+          parts.push(',');
+          lineBreak();
+          break;
+        case ':':
+          parts.push(': ');
+          break;
+        default:
+          parts.push(token);
+      }
+    }
+    return parts.join('');
   }
 
   async function startPolling() {

@@ -47,6 +47,7 @@ type Upstream struct {
 	batch    *source
 	interval time.Duration
 	sequence atomic.Uint64
+	Archive  func(context.Context, UpstreamAttempt) error
 }
 
 func NewUpstream(configs []SourceConfig, batch *SourceConfig, interval, timeout time.Duration) (*Upstream, error) {
@@ -98,12 +99,24 @@ func (u *Upstream) Batch(ctx context.Context, point Point) (Response, error) {
 	if u.batch == nil {
 		return nil, ErrBatchSourceUnavailable
 	}
-	return u.request(ctx, *u.batch, point, true, nil)
+	return u.request(ctx, *u.batch, point, true, nil, "batch")
 }
 
 type UpstreamPayload struct {
-	Source string
-	Body   []byte
+	Source   string
+	Body     []byte
+	Archived bool
+}
+
+type UpstreamAttempt struct {
+	Source     string
+	Origin     string
+	Point      Point
+	StartedAt  time.Time
+	Status     int
+	Body       []byte
+	Incomplete bool
+	Error      string
 }
 
 func (u *Upstream) Reverse(ctx context.Context, point Point) (Response, UpstreamPayload, error) {
@@ -151,9 +164,9 @@ func (u *Upstream) reverseAttempt(ctx context.Context, src source, point Point, 
 		// 为后续源保留时间。单个尝试也受 HTTP 客户端的上游超时限制。
 		attempt, cancel := context.WithTimeout(ctx, time.Until(deadline)/time.Duration(remaining))
 		defer cancel()
-		return u.request(attempt, src, point, wait, payload)
+		return u.request(attempt, src, point, wait, payload, "reverse")
 	}
-	return u.request(ctx, src, point, wait, payload)
+	return u.request(ctx, src, point, wait, payload, "reverse")
 }
 
 type Comparison struct {
@@ -166,7 +179,7 @@ type Comparison struct {
 func (u *Upstream) Compare(ctx context.Context, point Point) []Comparison {
 	results := make([]Comparison, 0, len(u.sources))
 	for _, src := range u.sources {
-		response, err := u.request(ctx, src, point, true, nil)
+		response, err := u.request(ctx, src, point, true, nil, "compare")
 		result := Comparison{Source: src.config.Name, Address: map[string]any{}}
 		if err != nil {
 			result.DisplayName = "失败: " + err.Error()
@@ -182,7 +195,23 @@ type RetryLater struct{ At time.Time }
 
 func (e *RetryLater) Error() string { return "上游暂不可用" }
 
-func (u *Upstream) request(ctx context.Context, src source, point Point, wait bool, payload *UpstreamPayload) (Response, error) {
+func (u *Upstream) request(ctx context.Context, src source, point Point, wait bool, payload *UpstreamPayload, origin string) (_ Response, resultErr error) {
+	var recorded *UpstreamAttempt
+	defer func() {
+		if recorded == nil {
+			return
+		}
+		if resultErr != nil {
+			recorded.Error = resultErr.Error()
+		}
+		recordCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), time.Second)
+		defer cancel()
+		if err := u.Archive(recordCtx, *recorded); err != nil {
+			slog.Error("保存上游查询归档失败", "source", recorded.Source, "origin", origin, "error", err)
+		} else if payload != nil && resultErr == nil {
+			payload.Archived = true
+		}
+	}()
 	g := src.gate
 	if wait {
 		select {
@@ -237,6 +266,9 @@ func (u *Upstream) request(ctx context.Context, src source, point Point, wait bo
 	req.Header.Set("Referer", "http://localhost:3000/")
 	req.Header.Set("Accept-Language", "zh-CN,zh")
 	g.next = time.Now().Add(u.interval)
+	if u.Archive != nil {
+		recorded = &UpstreamAttempt{Source: src.config.Name, Origin: origin, Point: point, StartedAt: time.Now()}
+	}
 	response, requestErr := u.client.Do(req)
 	var result Response
 	var rawBody []byte
@@ -249,12 +281,24 @@ func (u *Upstream) request(ctx context.Context, src source, point Point, wait bo
 		err = errors.New("上游连接失败或超时")
 	default:
 		defer response.Body.Close()
+		const maxBody = 2 << 20
+		var readErr error
+		if recorded != nil || response.StatusCode >= 200 && response.StatusCode < 300 {
+			rawBody, readErr = io.ReadAll(io.LimitReader(response.Body, maxBody+1))
+		} else if response.StatusCode == http.StatusNotFound {
+			rawBody, readErr = io.ReadAll(io.LimitReader(response.Body, 16<<10))
+		}
+		if recorded != nil {
+			recorded.Status = response.StatusCode
+			recorded.Body = rawBody[:min(len(rawBody), maxBody)]
+			recorded.Incomplete = readErr != nil || len(rawBody) > maxBody
+		}
 		switch {
 		case response.StatusCode == http.StatusNotFound:
 			err = errors.New("HTTP 404")
 			// 反代未配置路径时也会返回 404。只有明确的上游无结果信号才结束任务。
-			if raw, readErr := io.ReadAll(io.LimitReader(response.Body, 16<<10)); readErr == nil {
-				if _, parseErr := parseUpstream(raw, point); errors.Is(parseErr, ErrNoResult) {
+			if readErr == nil && len(rawBody) <= 16<<10 {
+				if _, parseErr := parseUpstream(rawBody, point); errors.Is(parseErr, ErrNoResult) {
 					err = ErrNoResult
 				}
 			}
@@ -267,13 +311,10 @@ func (u *Upstream) request(ctx context.Context, src source, point Point, wait bo
 				}
 			}
 		default:
-			const maxBody = 2 << 20
-			raw, readErr := io.ReadAll(io.LimitReader(response.Body, maxBody+1))
-			if readErr != nil || len(raw) > maxBody {
+			if readErr != nil || len(rawBody) > maxBody {
 				err = errors.New("无法读取上游响应")
 			} else {
-				result, err = parseUpstream(raw, point)
-				rawBody = raw
+				result, err = parseUpstream(rawBody, point)
 			}
 		}
 	}

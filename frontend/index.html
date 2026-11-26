@@ -4,8 +4,8 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>Nominatim Cache · 概览</title>
-  <link rel="stylesheet" href="vendor/tabler.min.css?v=20261126-3">
-  <link rel="stylesheet" href="css/style.css?v=20261126-3">
+  <link rel="stylesheet" href="vendor/tabler.min.css?v=20261126-5">
+  <link rel="stylesheet" href="css/style.css?v=20261126-5">
 </head>
 <body>
   <main class="admin-content">
@@ -26,13 +26,19 @@
     </section>
 
     <section class="card trend-card">
-      <div class="card-header"><div><h2 class="card-title">近 7 天请求趋势</h2><div class="text-secondary small">命中与未命中请求</div></div><a class="btn btn-sm btn-outline-secondary" href="requests.html"><span data-icon="list-details"></span> 最近请求</a></div>
+      <div class="card-header">
+        <div>
+          <h2 class="card-title">近 7 天请求趋势</h2>
+          <div class="text-secondary small">命中与未命中请求</div>
+        </div>
+        <a class="btn btn-sm btn-outline-secondary" href="requests.html"><span data-icon="list-details"></span> 最近请求</a>
+      </div>
       <div class="chart-container"><canvas id="trendChart" aria-label="近七天缓存命中与未命中趋势"></canvas></div>
     </section>
     <footer class="admin-footer">Nominatim Cache <span>地点反查与缓存管理</span></footer>
   </main>
-  <script src="js/admin-shell.js?v=20261126-3"></script>
-  <script src="js/api.js?v=20261126-3"></script>
-  <script src="js/dashboard.js?v=20261126-3"></script>
+  <script src="js/admin-shell.js?v=20261126-5"></script>
+  <script src="js/api.js?v=20261126-5"></script>
+  <script src="js/dashboard.js?v=20261126-5"></script>
 </body>
 </html>

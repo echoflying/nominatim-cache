@@ -43,7 +43,11 @@ func (s Server) reverse(w http.ResponseWriter, r *http.Request) {
 		response = geocode.Response{"error": err.Error()}
 	}
 	var output bytes.Buffer
-	writeJSONTo(w, io.MultiWriter(&output, w), status, response)
+	if hit {
+		writeJSON(w, status, response)
+	} else {
+		writeJSONTo(w, io.MultiWriter(&output, w), status, response)
+	}
 	recordCtx, stop := context.WithTimeout(context.WithoutCancel(r.Context()), logTimeout)
 	defer stop()
 	if logErr := s.Store.RecordAccess(recordCtx, point, key, hit, status, output.String(), upstream); logErr != nil {

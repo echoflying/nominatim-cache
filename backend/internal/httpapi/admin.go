@@ -206,7 +206,16 @@ func (s Server) stats(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s Server) daily(w http.ResponseWriter, r *http.Request) {
-	data, err := s.Store.Daily(r.Context(), time.Now().In(s.Config.Location))
+	days := 7
+	if raw := r.URL.Query().Get("days"); raw != "" {
+		parsed, err := strconv.Atoi(raw)
+		if err != nil || parsed < 1 || parsed > 366 {
+			adminError(w, http.StatusBadRequest, "days must be between 1 and 366")
+			return
+		}
+		days = parsed
+	}
+	data, err := s.Store.Daily(r.Context(), time.Now().In(s.Config.Location), days)
 	if err != nil {
 		operationError(w, err, "Failed to get daily stats")
 		return
