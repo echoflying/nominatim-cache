@@ -17,6 +17,8 @@ Raven 使用 `BASE_PATH=/nominatim`。在 Nginx `http` 块引入 `deploy/raven/n
 
 Raven 的管理入口为 `https://x.zaitu.cn/ops/nominatim/`。OPS 注册系统 `nominatim` 与权限 `nominatim.access`，首次授权现有超级管理员。在同一 HTTPS `server` 引入 `deploy/raven/nominatim-ops-location.conf`。用 root 运行 `python3 deploy/raven/render-ops-upstream-auth.py` 生成仅 root 可读的 Nginx 认证片段。Nominatim 的管理账号或密码轮换后重新生成片段，再校验和重载 Nginx。验证登录前跳转、未授权账号 403、登录后统计及缓存列表，并检查跨站写请求被拒绝。
 
+会话过期时，概览、缓存清单和最近请求页面都跳转到 `/ops/`。管理 API 保留 HTTP 401，并以 UTF-8 JSON 提示重新登录。
+
 生产必须通过 `NOMINATIM_PRIMARY`、`NOMINATIM_BACKUP_1`、`NOMINATIM_BACKUP_2` 至少配置一个交互上游。`REVERSE_COLD_LIMIT` 默认允许 16 个未命中的同步请求同时进入查询流程。`LEGACY_HOST` 默认是 `nc.zaitu.cn`，`LEGACY_TIMEOUT_MS` 默认 6500，范围 1000 至 7000 毫秒。两项仅在旧域名转给 Go 时使用。发布验收检查接口指南、健康、冷查询、缓存命中、CORS 及公开入口对批量和管理路由的隔离。
 
 用 `BATCH_TOKENS` 配置具有独立身份的试用调用方，格式为 `caller=token,other=token`。另用 `NOMINATIM_BATCH_URL` 配置获准批量使用的自建或签约源。缺省只允许批量命中缓存。公共上游的用量及政策见 [批量设计](deploy/nominatim-cache-v2-raven.md#3-批量接口与队列)。
