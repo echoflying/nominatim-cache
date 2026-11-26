@@ -122,9 +122,13 @@ func (s Server) AdminHandler() http.Handler {
 	routes.HandleFunc("GET /list.html", s.asset("list.html"))
 	routes.HandleFunc("GET /requests.html", s.asset("requests.html"))
 	static := http.FileServer(http.Dir(s.Config.Frontend))
-	routes.Handle("GET /css/", static)
-	routes.Handle("GET /js/", static)
-	routes.Handle("GET /vendor/", static)
+	revalidateStatic := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Cache-Control", "no-cache")
+		static.ServeHTTP(w, r)
+	})
+	routes.Handle("GET /css/", revalidateStatic)
+	routes.Handle("GET /js/", revalidateStatic)
+	routes.Handle("GET /vendor/", revalidateStatic)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		securityHeaders(w)
 		routes.ServeHTTP(w, r)
@@ -140,6 +144,7 @@ func securityHeaders(w http.ResponseWriter) {
 
 func (s Server) asset(name string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Cache-Control", "no-cache")
 		http.ServeFile(w, r, filepath.Join(s.Config.Frontend, name))
 	}
 }
