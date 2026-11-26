@@ -13,7 +13,7 @@ Raven 首次部署所用的实际端口、数据库和切换步骤见 [Raven 部
 
 公开 API 默认监听 `127.0.0.1:3000`，路径前缀用 `BASE_PATH` 指定。管理页面和管理 API 默认监听 `127.0.0.1:3001`，用 `ADMIN_LISTEN_ADDR` 配置独立回环地址，用 `FRONTEND_DIR` 指定静态资源目录。生产用独立的私有 HTTPS 管理入口，并设置非默认管理账号与密码。管理凭据只保留在当前页面内存，旧存储键会清理，首次发布时轮换旧凭据。
 
-Raven 使用 `BASE_PATH=/nominatim`。在 Nginx `http` 块引入 `deploy/raven/nominatim-rate.conf`，在 `x.zaitu.cn` 的 HTTPS `server` 块引入 `deploy/raven/nominatim-location.conf`。运行 `nginx -t` 再重载。公网接入 `/reverse`、`/health`、`/help` 及限流的 `/altview/place-batches` 路由，路径均带 `/nominatim` 前缀；通用批量任务路由仍不对公网开放。
+Raven 使用 `BASE_PATH=/nominatim`。在 Nginx `http` 块引入 `deploy/raven/nominatim-rate.conf`，在 `x.zaitu.cn` 的 HTTPS `server` 块引入 `deploy/raven/nominatim-location.conf`。运行 `nginx -t` 再重载。公网接入 `/reverse`、`/health`、`/help` 及需要 Bearer 凭据的通用 `/api/reverse/batches` 路由，路径均带 `/nominatim` 前缀。所有调用方使用同一批量 API、共享队列和限流规则。
 
 Raven 的管理入口为 `https://x.zaitu.cn/ops/nominatim/`。OPS 注册系统 `nominatim` 与权限 `nominatim.access`，首次授权现有超级管理员。在同一 HTTPS `server` 引入 `deploy/raven/nominatim-ops-location.conf`。用 root 运行 `python3 deploy/raven/render-ops-upstream-auth.py` 生成仅 root 可读的 Nginx 认证片段。Nominatim 的管理账号或密码轮换后重新生成片段，再校验和重载 Nginx。验证登录前跳转、未授权账号 403、登录后统计及缓存列表，并检查跨站写请求被拒绝。
 
@@ -21,7 +21,7 @@ Raven 的管理入口为 `https://x.zaitu.cn/ops/nominatim/`。OPS 注册系统 
 
 生产必须通过 `NOMINATIM_PRIMARY`、`NOMINATIM_BACKUP_1`、`NOMINATIM_BACKUP_2` 至少配置一个交互上游。`REVERSE_COLD_LIMIT` 默认允许 16 个未命中的同步请求同时进入查询流程。`LEGACY_HOST` 默认是 `nc.zaitu.cn`，`LEGACY_TIMEOUT_MS` 默认 6500，范围 1000 至 7000 毫秒。两项仅在旧域名转给 Go 时使用。发布验收检查接口指南、健康、冷查询、缓存命中、CORS 及公开入口对批量和管理路由的隔离。
 
-用 `BATCH_TOKENS` 配置具有独立身份的试用调用方，格式为 `caller=token,other=token`。另用 `NOMINATIM_BATCH_URL` 配置获准批量使用的自建或签约源。缺省只允许批量命中缓存。公共上游的用量及政策见 [批量设计](deploy/nominatim-cache-v2-raven.md#3-批量接口与队列)。
+用 `BATCH_TOKENS` 配置批量调用方身份和凭据，格式为 `caller=token,other=token`。调用方通过同一组 `/api/reverse/batches` 接口提交和读取任务，不按应用另设公网路由。另用 `NOMINATIM_BATCH_URL` 配置获准批量使用的自建或签约源。缺省只允许批量命中缓存。公共上游的用量及政策见 [批量设计](deploy/nominatim-cache-v2-raven.md#3-批量接口与队列)。
 
 新增 SQL 若已确认可与现有程序共用，文件名用 `003_compat002_description.sql` 表示最低兼容版本 002。没有 `compat` 标记的新增迁移要求对应新版程序。旧程序始终校验自己认识的迁移内容，并在新迁移执行期间停止启动。将兼容性声明纳入迁移演练，包含一次旧二进制的启动验证。
 

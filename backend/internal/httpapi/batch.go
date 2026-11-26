@@ -1,7 +1,6 @@
 package httpapi
 
 import (
-	"context"
 	"crypto/sha256"
 	"database/sql"
 	"encoding/hex"
@@ -50,24 +49,11 @@ type batchLinks struct {
 	ResultsURL string `json:"results_url"`
 }
 
-type batchBasePathKey struct{}
-
 func links(r *http.Request, batch store.Batch) batchLinks {
 	prefix, _ := r.Context().Value(prefixKey{}).(string)
-	base, _ := r.Context().Value(batchBasePathKey{}).(string)
-	if base == "" {
-		base = "/api/reverse/batches"
-	}
+	base := "/api/reverse/batches"
 	statusURL := prefix + base + "/" + batch.ID
 	return batchLinks{Batch: batch, StatusURL: statusURL, ResultsURL: statusURL + "/results"}
-}
-
-func altviewBatchAccess(next func(http.ResponseWriter, *http.Request, string)) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Cache-Control", "no-store")
-		r = r.WithContext(context.WithValue(r.Context(), batchBasePathKey{}, "/altview/place-batches"))
-		next(w, r, "altview-mobile")
-	}
 }
 
 func (s Server) submitBatch(w http.ResponseWriter, r *http.Request, caller string) {

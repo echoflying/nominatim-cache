@@ -44,9 +44,6 @@ func (s Server) Handler() http.Handler {
 	routes.HandleFunc("POST /api/reverse/batches", s.batchAuth(s.submitBatch))
 	routes.HandleFunc("GET /api/reverse/batches/{id}", s.batchAuth(s.batchStatus))
 	routes.HandleFunc("GET /api/reverse/batches/{id}/results", s.batchAuth(s.batchResults))
-	routes.HandleFunc("POST /altview/place-batches", altviewBatchAccess(s.submitBatch))
-	routes.HandleFunc("GET /altview/place-batches/{id}", altviewBatchAccess(s.batchStatus))
-	routes.HandleFunc("GET /altview/place-batches/{id}/results", altviewBatchAccess(s.batchResults))
 
 	mux := routes
 	if prefix := s.Config.BasePath; prefix != "" {
@@ -69,21 +66,21 @@ func (s Server) Handler() http.Handler {
 				w.WriteHeader(http.StatusNoContent)
 				return
 			}
-		case "/altview/place-batches":
+		case "/api/reverse/batches":
 			w.Header().Set("Access-Control-Allow-Origin", "*")
 			w.Header().Set("Access-Control-Expose-Headers", "Location, Retry-After")
 			if r.Method == http.MethodOptions {
 				w.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS")
-				w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Idempotency-Key")
+				w.Header().Set("Access-Control-Allow-Headers", "Authorization, Content-Type, Idempotency-Key")
 				w.WriteHeader(http.StatusNoContent)
 				return
 			}
 		default:
-			if strings.HasPrefix(path, "/altview/place-batches/") {
+			if strings.HasPrefix(path, "/api/reverse/batches/") {
 				w.Header().Set("Access-Control-Allow-Origin", "*")
 				if r.Method == http.MethodOptions {
 					w.Header().Set("Access-Control-Allow-Methods", "GET, OPTIONS")
-					w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+					w.Header().Set("Access-Control-Allow-Headers", "Authorization, Content-Type")
 					w.WriteHeader(http.StatusNoContent)
 					return
 				}
@@ -101,9 +98,9 @@ func (s Server) help(w http.ResponseWriter, _ *http.Request) {
 		"description": "以经纬度反查地点。返回用于分组的短地名，也保留完整地址。",
 		"endpoints": []jsonObject{
 			{"method": "GET", "path": base + "/reverse", "description": "按坐标反查地名"},
-			{"method": "POST", "path": base + "/altview/place-batches", "description": "提交地点批量查询，每批最多 500 个坐标"},
-			{"method": "GET", "path": base + "/altview/place-batches/{job_id}", "description": "查看批量任务状态"},
-			{"method": "GET", "path": base + "/altview/place-batches/{job_id}/results", "description": "分页或按游标读取批量结果"},
+			{"method": "POST", "path": base + "/api/reverse/batches", "description": "提交通用批量反查，需要 Bearer 凭据，每批最多 500 个坐标"},
+			{"method": "GET", "path": base + "/api/reverse/batches/{job_id}", "description": "查看调用方自己的批量任务状态，需要 Bearer 凭据"},
+			{"method": "GET", "path": base + "/api/reverse/batches/{job_id}/results", "description": "分页或按游标读取批量结果，需要 Bearer 凭据"},
 			{"method": "GET", "path": base + "/health", "description": "检查数据库就绪状态，并返回版本和提交"},
 			{"method": "GET", "path": base + "/help", "description": "读取本站接口指南"},
 		},
@@ -130,13 +127,14 @@ func (s Server) help(w http.ResponseWriter, _ *http.Request) {
 		"status_codes": map[string]string{
 			"200": "查询完成。没有合适的短地名时 place_name 可为空。",
 			"400": "坐标无效。",
+			"401": "批量接口的 Bearer 凭据无效或缺失。",
 			"429": "公网入口限流。按 Retry-After 退避。",
 			"500": "查询失败，可延后再试。",
 			"502": "公网入口暂时无法连接反查服务。",
 			"503": "反查繁忙或数据库未就绪。存在 Retry-After 时按其退避。",
 			"504": "公网入口等待反查结果超时。",
 		},
-		"access": "公开接口免认证，支持浏览器跨域。批量和管理接口通过受限入口访问。",
+		"access": "单点反查免认证。批量反查需使用服务端配置的 Bearer 凭据；管理接口需管理认证。",
 	})
 }
 

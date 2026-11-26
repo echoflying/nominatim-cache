@@ -11,9 +11,6 @@
 | `/api/reverse/batches` | POST | Bearer | 提交批量反查（Go v2） |
 | `/api/reverse/batches/{job_id}` | GET | Bearer | 查看批次状态（Go v2） |
 | `/api/reverse/batches/{job_id}/results` | GET | Bearer | 分页读取批次结果（Go v2） |
-| `/altview/place-batches` | POST | Altview 公共入口 | 提交 Altview 地点预热批次 |
-| `/altview/place-batches/{job_id}` | GET | 随机任务 ID | 查看 Altview 批次状态 |
-| `/altview/place-batches/{job_id}/results` | GET | 随机任务 ID | 分页读取 Altview 批次结果 |
 | `/admin/cache/list` | GET | Basic Auth | 缓存列表 |
 | `/admin/cache/:key` | GET | Basic Auth | 缓存详情 |
 | `/admin/cache/:key` | DELETE | Basic Auth | 删除缓存 |
@@ -53,10 +50,13 @@ curl -u admin:admin123 http://localhost:3000/admin/stats
 | 路径 | 用途 |
 | --- | --- |
 | `GET /nominatim/reverse?lat=30.28746&lon=120.16145` | 单点反查，返回 `place_name`、`place_quality`、`display_name` 和 `address` |
+| `POST /nominatim/api/reverse/batches` | 提交批量反查，需要 `Authorization: Bearer <token>` |
+| `GET /nominatim/api/reverse/batches/{job_id}` | 查询批量任务状态，需要 Bearer 凭据 |
+| `GET /nominatim/api/reverse/batches/{job_id}/results` | 分页或增量读取批量结果，需要 Bearer 凭据 |
 | `GET /nominatim/health` | 就绪检查。JSON 含 `status`、`version`、`commit`、`database_ready`、`timestamp` 和 `uptime`。数据库不可用返回 503 |
 | `GET /nominatim/help` | JSON 接口指南，包含调用示例、字段说明、状态码与重试约定 |
 
-这些路径通过 `https://x.zaitu.cn` 上的 Nginx 访问 Nominatim Cache。单点接口支持 CORS 和 `OPTIONS` 预检，并按 IP 限流，429 附 `Retry-After`。通用批量 API 仅在授权环境访问；Altview 专用批量入口单独限流，使用共享的 `altview-mobile` 队列调用方和不可预测的任务 ID，不接受调用方传入坐标以外的上游参数。Raven 的管理页面和同源管理接口通过 `/ops/nominatim/` 提供，由 OPS 校验会话及 `nominatim.access`。独立管理监听仍可通过 SSH 隧道使用 Basic Auth。
+这些路径通过 `https://x.zaitu.cn` 上的 Nginx 访问 Nominatim Cache。单点和批量接口均支持 CORS；单点、批量提交和批量结果读取分别按来源 IP 限流，429 附 `Retry-After`。所有批量调用方共用同一组 API、队列和限流规则。服务器通过 `BATCH_TOKENS` 将 Bearer 凭据映射到调用方名称；状态和结果只对提交任务的调用方开放。Raven 的管理页面和同源管理接口通过 `/ops/nominatim/` 提供，由 OPS 校验会话及 `nominatim.access`。独立管理监听仍可通过 SSH 隧道使用 Basic Auth。
 
 ### 批量逆地理编码（Go v2）
 
@@ -72,15 +72,16 @@ curl -u admin:admin123 http://localhost:3000/admin/stats
 
 批量查询优先复用缓存。未配置获准批量查询的上游时，未命中的点标记 `batch_source_unavailable`，其他点仍返回已有结果。批量接口的启用与上游配置见 [部署说明](DEPLOYMENT.md)。
 
-### Altview 地点批量预热
+### 公网批量反查
 
-`POST /nominatim/altview/place-batches` 接受与通用批量接口相同的 `{"points":[{"lat":30.28746,"lon":120.16145}]}` JSON，但要求 `Idempotency-Key`，无需把服务端 Bearer 凭据放进 APK。每批最多 `BATCH_LIMIT` 个点，使用共享 Altview 调用方的 `BATCH_PENDING_LIMIT` 待处理上限；任务 ID 为随机 128 位值。状态和结果路径分别为 `/nominatim/altview/place-batches/{job_id}` 与 `/nominatim/altview/place-batches/{job_id}/results`，返回字段和状态语义与通用批量接口一致。少于 10 个去重坐标的小批量会优先于普通批量任务。单点反查始终拥有更高的上游调度优先级。Raven 对提交入口单独按 IP 限速。
+所有 App、网站和其他调用方使用同一组批量接口，不按应用另设路径。提交请求需携带 `Authorization: Bearer <token>` 和 `Idempotency-Key`。服务器通过 `BATCH_TOKENS` 将凭据映射到调用方名称；调用方使用相同的接口和服务端队列。每批最多 `BATCH_LIMIT` 个点，状态和结果只对提交任务的调用方开放。Raven 对提交和结果查询分别按来源 IP 限流。
 
-Altview 结果接口同时支持 `page` 分页和 `cursor` 增量读取。新客户端建议每次请求 `limit=50`、`wait=8`，处理响应后保存 `next_cursor` 并继续请求，直到 `has_more=false` 且状态任务已完成。增量模式只返回新完成的条目，不重复发送先前已读结果。
+批次按规模进入不同优先级：少于 10 个去重坐标的小批量优先于普通批量，单点反查优先级最高。所有任务仍共用上游速率限制。结果接口支持 `page` 分页和 `cursor` 增量读取。调用方可每次请求 `limit=50`、`wait=8`，处理响应后保存 `next_cursor` 并继续请求，直到 `has_more=false` 且任务已完成。增量模式只返回新完成的条目，不重复发送先前已读结果。
 
 **游标读取示例**
 ```http
-GET /nominatim/altview/place-batches/0123456789abcdef0123456789abcdef/results?cursor=0&limit=50&wait=8
+GET /nominatim/api/reverse/batches/0123456789abcdef0123456789abcdef/results?cursor=0&limit=50&wait=8
+Authorization: Bearer <token>
 ```
 ```json
 {
