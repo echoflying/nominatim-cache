@@ -22,6 +22,7 @@
 | `/admin/stats/daily` | GET | Basic Auth | 每日统计 |
 | `/admin/batch-credentials` | GET/POST | 管理认证 | 查看、创建批量调用方凭据 |
 | `/admin/batch-credentials/{id}` | DELETE | 管理认证 | 撤销批量调用方凭据 |
+| `/admin/batch-credentials/{id}/reveal` | POST | 管理认证 | 解密查看指定密钥，并记录查看时间 |
 | `/admin/query` | POST | Basic Auth | 查询所有上游 |
 
 ## 二、认证方式
@@ -78,9 +79,9 @@ curl -u admin:admin123 http://localhost:3000/admin/stats
 
 ### 公网批量反查
 
-所有 App、网站和其他调用方使用同一组批量接口，不按应用另设路径。提交请求需携带 `Authorization: Bearer <token>` 和 `Idempotency-Key`。管理员在 `/ops/nominatim/credentials.html` 创建调用方 ID、说明标签和凭据；原始密钥只在创建时显示一次，服务端只保存 SHA-256 摘要。每批最多 `BATCH_LIMIT` 个点，状态和结果只对该调用方开放。Raven 对提交和结果查询分别按来源 IP 限流。至少有一个未撤销凭据时批量 API 启用，否则帮助接口显示 `batch.enabled=false`，批量路径返回 404。
+所有 App、网站和其他调用方使用同一组批量接口，不按应用另设路径。提交请求需携带 `Authorization: Bearer <token>` 和 `Idempotency-Key`。管理员在 `/ops/nominatim/credentials.html` 创建调用方 ID、说明标签和凭据；列表默认显示密钥提示，管理员可按需查看。数据库同时保存用于鉴权的 SHA-256 摘要和用 Raven 独立加密主密钥加密的密钥密文。每批最多 `BATCH_LIMIT` 个点，状态和结果只对该调用方开放。Raven 对提交和结果查询分别按来源 IP 限流。至少有一个未撤销凭据时批量 API 启用，否则帮助接口显示 `batch.enabled=false`，批量路径返回 404。
 
-调用方 ID 是稳定名称，建议按应用及平台区分，例如 `altview-android`、`travelody-web`。客户端不另传 App ID，服务端根据 Bearer 密钥识别调用方。密钥只在管理后台创建成功时显示一次，请立即复制到受控配置；之后后台只显示掩码、状态和使用时间。轮换时先为同一调用方创建新密钥、更新客户端，再撤销旧密钥。当前接口没有终端 ID 字段，不会区分同一应用的具体安装设备。
+调用方 ID 是稳定名称，建议按应用及平台区分，例如 `altview-android`、`travelody-web`。客户端不另传 App ID，服务端根据 Bearer 密钥识别调用方。管理后台可查看密钥并记录查看时间；限制管理账号权限，避免无关人员读取。轮换时先为同一调用方创建新密钥、更新客户端，再撤销旧密钥。当前接口没有终端 ID 字段，不会区分同一应用的具体安装设备。
 
 批次按规模进入不同优先级：少于 10 个去重坐标的小批量优先于普通批量，单点反查优先级最高。所有任务仍共用上游速率限制。结果接口支持 `page` 分页和 `cursor` 增量读取。调用方可每次请求 `limit=50`、`wait=8`，处理响应后保存 `next_cursor` 并继续请求，直到 `has_more=false` 且任务已完成。增量模式只返回新完成的条目，不重复发送先前已读结果。
 

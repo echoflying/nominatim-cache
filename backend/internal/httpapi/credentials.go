@@ -31,7 +31,11 @@ func (s Server) createBatchCredential(w http.ResponseWriter, r *http.Request) {
 		adminError(w, http.StatusBadRequest, "调用方 ID 需以小写字母开头，并仅使用小写字母、数字、点、下划线或短横线；说明最多 100 个字符")
 		return
 	}
-	item, token, err := s.Store.CreateBatchCredential(r.Context(), input.CallerID, input.Label)
+	if len(s.Config.CredentialEncryptionKey) != 32 {
+		adminError(w, http.StatusServiceUnavailable, "凭据加密密钥未配置")
+		return
+	}
+	item, token, err := s.Store.CreateBatchCredential(r.Context(), input.CallerID, input.Label, s.Config.CredentialEncryptionKey)
 	if err != nil {
 		operationError(w, err, "Failed to create batch credential")
 		return
@@ -41,7 +45,33 @@ func (s Server) createBatchCredential(w http.ResponseWriter, r *http.Request) {
 		Credential store.BatchCredential `json:"credential"`
 		Token      string                `json:"token"`
 		Notice     string                `json:"notice"`
-	}{item, token, "密钥只显示这一次。请立即复制并保存。"})
+	}{item, token, "密钥已加密保存，之后可在列表中按需查看。"})
+}
+
+func (s Server) revealBatchCredential(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	if err != nil || id <= 0 {
+		adminError(w, http.StatusBadRequest, "Invalid credential ID")
+		return
+	}
+	if len(s.Config.CredentialEncryptionKey) != 32 {
+		adminError(w, http.StatusServiceUnavailable, "凭据加密密钥未配置")
+		return
+	}
+	token, err := s.Store.RevealBatchCredential(r.Context(), id, s.Config.CredentialEncryptionKey)
+	if err != nil {
+		switch err {
+		case store.ErrCredentialNotFound:
+			adminError(w, http.StatusNotFound, "Credential not found")
+		case store.ErrCredentialSecretUnavailable:
+			adminError(w, http.StatusConflict, "这把凭据在启用可查看存储前创建，请新建替代密钥")
+		default:
+			operationError(w, err, "Failed to reveal batch credential")
+		}
+		return
+	}
+	w.Header().Set("Cache-Control", "no-store")
+	adminOK(w, map[string]any{"id": id, "token": token})
 }
 
 func (s Server) revokeBatchCredential(w http.ResponseWriter, r *http.Request) {

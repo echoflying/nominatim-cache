@@ -2,6 +2,8 @@ package store
 
 import (
 	"context"
+	"crypto/aes"
+	"crypto/cipher"
 	"crypto/rand"
 	"crypto/sha256"
 	"database/sql"
@@ -17,32 +19,49 @@ var ErrCredentialNotFound = errors.New("batch credential not found")
 var callerIDPattern = regexp.MustCompile(`^[a-z][a-z0-9._-]{0,63}$`)
 
 type BatchCredential struct {
-	ID         int64  `json:"id"`
-	CallerID   string `json:"caller_id"`
-	Label      string `json:"label"`
-	TokenHint  string `json:"token_hint"`
-	CreatedAt  int64  `json:"created_at"`
-	LastUsedAt *int64 `json:"last_used_at"`
-	RevokedAt  *int64 `json:"revoked_at"`
+	ID             int64  `json:"id"`
+	CallerID       string `json:"caller_id"`
+	Label          string `json:"label"`
+	TokenHint      string `json:"token_hint"`
+	CreatedAt      int64  `json:"created_at"`
+	LastUsedAt     *int64 `json:"last_used_at"`
+	LastRevealedAt *int64 `json:"last_revealed_at"`
+	RevokedAt      *int64 `json:"revoked_at"`
 }
 
 func ValidBatchCallerID(value string) bool { return callerIDPattern.MatchString(value) }
 
-func (s Store) CreateBatchCredential(ctx context.Context, callerID, label string) (BatchCredential, string, error) {
+func (s Store) CreateBatchCredential(ctx context.Context, callerID, label string, key []byte) (BatchCredential, string, error) {
 	if !ValidBatchCallerID(callerID) || label == "" || len([]rune(label)) > 100 {
 		return BatchCredential{}, "", errors.New("invalid caller ID or label")
+	}
+	if len(key) != 32 {
+		return BatchCredential{}, "", errors.New("credential encryption key is not configured")
 	}
 	var random [32]byte
 	if _, err := rand.Read(random[:]); err != nil {
 		return BatchCredential{}, "", err
 	}
 	token := "ncc_live_" + base64.RawURLEncoding.EncodeToString(random[:])
+	block, err := aes.NewCipher(key)
+	if err != nil {
+		return BatchCredential{}, "", err
+	}
+	gcm, err := cipher.NewGCM(block)
+	if err != nil {
+		return BatchCredential{}, "", err
+	}
+	nonce := make([]byte, gcm.NonceSize())
+	if _, err := rand.Read(nonce); err != nil {
+		return BatchCredential{}, "", err
+	}
+	ciphertext := gcm.Seal(nil, nonce, []byte(token), []byte(callerID))
 	sum := sha256.Sum256([]byte(token))
 	hash := hex.EncodeToString(sum[:])
 	hint := token[:12] + "..." + token[len(token)-6:]
 	now := time.Now().UnixMilli()
 	result, err := s.DB.ExecContext(ctx, `INSERT INTO batch_credentials
-		(caller_id,label,token_hash,token_hint,created_at) VALUES (?,?,?,?,?)`, callerID, label, hash, hint, now)
+		(caller_id,label,token_hash,token_hint,created_at,token_nonce,token_ciphertext) VALUES (?,?,?,?,?,?,?)`, callerID, label, hash, hint, now, nonce, ciphertext)
 	if err != nil {
 		return BatchCredential{}, "", err
 	}
@@ -54,7 +73,7 @@ func (s Store) CreateBatchCredential(ctx context.Context, callerID, label string
 }
 
 func (s Store) ListBatchCredentials(ctx context.Context) ([]BatchCredential, error) {
-	rows, err := s.DB.QueryContext(ctx, `SELECT id,caller_id,label,token_hint,created_at,last_used_at,revoked_at
+	rows, err := s.DB.QueryContext(ctx, `SELECT id,caller_id,label,token_hint,created_at,last_used_at,revoked_at,last_revealed_at
 		FROM batch_credentials ORDER BY created_at DESC,id DESC`)
 	if err != nil {
 		return nil, err
@@ -63,12 +82,48 @@ func (s Store) ListBatchCredentials(ctx context.Context) ([]BatchCredential, err
 	items := make([]BatchCredential, 0)
 	for rows.Next() {
 		var item BatchCredential
-		if err := rows.Scan(&item.ID, &item.CallerID, &item.Label, &item.TokenHint, &item.CreatedAt, &item.LastUsedAt, &item.RevokedAt); err != nil {
+		if err := rows.Scan(&item.ID, &item.CallerID, &item.Label, &item.TokenHint, &item.CreatedAt, &item.LastUsedAt, &item.RevokedAt, &item.LastRevealedAt); err != nil {
 			return nil, err
 		}
 		items = append(items, item)
 	}
 	return items, rows.Err()
+}
+
+var ErrCredentialSecretUnavailable = errors.New("credential secret unavailable")
+
+func (s Store) RevealBatchCredential(ctx context.Context, id int64, key []byte) (string, error) {
+	if len(key) != 32 {
+		return "", errors.New("credential encryption key is not configured")
+	}
+	var caller string
+	var nonce, ciphertext []byte
+	err := s.DB.QueryRowContext(ctx, `SELECT caller_id,token_nonce,token_ciphertext FROM batch_credentials WHERE id=?`, id).Scan(&caller, &nonce, &ciphertext)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", ErrCredentialNotFound
+	}
+	if err != nil {
+		return "", err
+	}
+	if len(nonce) == 0 || len(ciphertext) == 0 {
+		return "", ErrCredentialSecretUnavailable
+	}
+	block, err := aes.NewCipher(key)
+	if err != nil {
+		return "", err
+	}
+	gcm, err := cipher.NewGCM(block)
+	if err != nil {
+		return "", err
+	}
+	plain, err := gcm.Open(nil, nonce, ciphertext, []byte(caller))
+	if err != nil {
+		return "", errors.New("credential encryption key does not match stored credential")
+	}
+	if _, err := s.DB.ExecContext(ctx, `UPDATE batch_credentials SET last_revealed_at=? WHERE id=?`, time.Now().UnixMilli(), id); err != nil {
+		return "", err
+	}
+	return string(plain), nil
 }
 
 func (s Store) RevokeBatchCredential(ctx context.Context, id int64) error {

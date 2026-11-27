@@ -77,6 +77,13 @@ class NominatimAPI {
     return result.data;
   }
 
+  async revealBatchCredential(id) {
+    const response = await this.authenticatedFetch(`${this.baseUrl}/admin/batch-credentials/${encodeURIComponent(id)}/reveal`, { method: 'POST' });
+    const result = await response.json();
+    if (!result.success) throw new Error(result.error || '查看调用方密钥失败');
+    return result.data.token;
+  }
+
   /**
    * 获取最近访问日志
    */

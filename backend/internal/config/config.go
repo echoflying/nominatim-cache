@@ -1,6 +1,7 @@
 package config
 
 import (
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"net"
@@ -17,6 +18,7 @@ import (
 type Config struct {
 	DSN, Listen, Environment, Frontend, BasePath string
 	AdminListen, AdminUser, AdminPass            string
+	CredentialEncryptionKey                      []byte
 	LegacyHost                                   string
 	Location                                     *time.Location
 	Sources                                      []geocode.SourceConfig
@@ -37,6 +39,13 @@ func Load() (Config, error) {
 	}
 	if cfg.DSN == "" {
 		return cfg, errors.New("MARIADB_DSN is required")
+	}
+	if rawKey := os.Getenv("CREDENTIAL_ENCRYPTION_KEY"); rawKey != "" {
+		key, err := base64.StdEncoding.DecodeString(rawKey)
+		if err != nil || len(key) != 32 {
+			return cfg, errors.New("CREDENTIAL_ENCRYPTION_KEY must be a base64-encoded 32-byte value")
+		}
+		cfg.CredentialEncryptionKey = key
 	}
 	if cfg.Environment == "production" && (cfg.AdminUser == "admin" || cfg.AdminPass == "admin123") {
 		return cfg, errors.New("production requires non-default ADMIN_USERNAME and ADMIN_PASSWORD")

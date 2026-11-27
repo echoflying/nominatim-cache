@@ -125,7 +125,8 @@ func (s Server) help(w http.ResponseWriter, r *http.Request) {
 		},
 		"batch": map[string]any{
 			"enabled":                         batchEnabled,
-			"authentication":                  "Authorization: Bearer <token>；在运维后台的调用方凭据页创建。密钥仅创建时显示一次。",
+			"authentication":                  "Authorization: Bearer <token>；在运维后台的调用方凭据页创建。",
+			"credential_encryption":           "密钥以 SHA-256 摘要鉴权，并由服务器 AES-GCM 主密钥加密保存；管理员可在运维后台按需查看。",
 			"credential_management":           "/ops/nominatim/credentials.html",
 			"max_points_per_job":              batchLimit,
 			"pending_points_limit_per_caller": s.Config.PendingLimit,
@@ -168,6 +169,7 @@ func (s Server) AdminHandler() http.Handler {
 	routes.HandleFunc("GET /admin/batch-credentials", s.admin(s.listBatchCredentials))
 	routes.HandleFunc("POST /admin/batch-credentials", s.admin(s.createBatchCredential))
 	routes.HandleFunc("DELETE /admin/batch-credentials/{id}", s.admin(s.revokeBatchCredential))
+	routes.HandleFunc("POST /admin/batch-credentials/{id}/reveal", s.admin(s.revealBatchCredential))
 	routes.HandleFunc("GET /{$}", s.asset("index.html"))
 	routes.HandleFunc("GET /list.html", s.asset("list.html"))
 	routes.HandleFunc("GET /requests.html", s.asset("requests.html"))
