@@ -31,12 +31,9 @@ func TestPlaceHelpAdvertisesPublicPaths(t *testing.T) {
 	}
 	wanted := map[string]bool{
 		"GET /nominatim/reverse": true, "GET /nominatim/health": true, "GET /nominatim/help": true,
-		"POST /nominatim/api/reverse/batches":                   true,
-		"GET /nominatim/api/reverse/batches/{job_id}":           true,
-		"GET /nominatim/api/reverse/batches/{job_id}/results":   true,
-		"POST /nominatim/altview/place-batches":                 true,
-		"GET /nominatim/altview/place-batches/{job_id}":         true,
-		"GET /nominatim/altview/place-batches/{job_id}/results": true,
+		"POST /nominatim/api/reverse/batches":                 true,
+		"GET /nominatim/api/reverse/batches/{job_id}":         true,
+		"GET /nominatim/api/reverse/batches/{job_id}/results": true,
 	}
 	for _, endpoint := range guide.Endpoints {
 		key := endpoint.Method + " " + endpoint.Path

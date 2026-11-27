@@ -222,3 +222,23 @@ func (s Server) daily(w http.ResponseWriter, r *http.Request) {
 	}
 	adminOK(w, data)
 }
+
+func (s Server) usage(w http.ResponseWriter, r *http.Request) {
+	days := 30
+	if raw := r.URL.Query().Get("days"); raw != "" {
+		parsed, err := strconv.Atoi(raw)
+		if err != nil || (parsed != 7 && parsed != 30 && parsed != 90 && parsed != 365) {
+			adminError(w, http.StatusBadRequest, "days must be one of 7, 30, 90, or 365")
+			return
+		}
+		days = parsed
+	}
+	end := time.Now().In(s.Config.Location)
+	from := end.AddDate(0, 0, -(days - 1))
+	report, err := s.Store.Usage(r.Context(), from, end)
+	if err != nil {
+		operationError(w, err, "Failed to get usage stats")
+		return
+	}
+	adminOK(w, report)
+}

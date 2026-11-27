@@ -11,9 +11,6 @@
 | `/api/reverse/batches` | POST | Bearer | 提交批量反查（Go v2） |
 | `/api/reverse/batches/{job_id}` | GET | Bearer | 查看批次状态（Go v2） |
 | `/api/reverse/batches/{job_id}/results` | GET | Bearer | 分页读取批次结果（Go v2） |
-| `/altview/place-batches` | POST | 服务端代理凭据 | Altview Android 专用窄代理；客户端不携带 Bearer |
-| `/altview/place-batches/{job_id}` | GET | 服务端代理凭据 | 查询 Altview 批次状态 |
-| `/altview/place-batches/{job_id}/results` | GET | 服务端代理凭据 | 读取 Altview 批次结果 |
 | `/admin/cache/list` | GET | Basic Auth | 缓存列表 |
 | `/admin/cache/:key` | GET | Basic Auth | 缓存详情 |
 | `/admin/cache/:key` | DELETE | Basic Auth | 删除缓存 |
@@ -23,6 +20,7 @@
 | `/admin/logs/{id}` | GET | 管理认证 | 单条反查请求的上游与最终响应（Go v2） |
 | `/admin/stats` | GET | Basic Auth | 统计概览 |
 | `/admin/stats/daily` | GET | Basic Auth | 每日统计 |
+| `/admin/stats/usage?days=30` | GET | 管理认证 | 按调用方、接口、客户端平台和版本统计用量 |
 | `/admin/batch-credentials` | GET/POST | 管理认证 | 查看、创建批量调用方凭据 |
 | `/admin/batch-credentials/{id}` | DELETE | 管理认证 | 撤销批量调用方凭据 |
 | `/admin/batch-credentials/{id}/reveal` | POST | 管理认证 | 解密查看指定密钥，并记录查看时间 |
@@ -59,9 +57,6 @@ curl -u admin:admin123 http://localhost:3000/admin/stats
 | `POST /nominatim/api/reverse/batches` | 提交批量反查，需要 `Authorization: Bearer <token>` |
 | `GET /nominatim/api/reverse/batches/{job_id}` | 查询批量任务状态，需要 Bearer 凭据 |
 | `GET /nominatim/api/reverse/batches/{job_id}/results` | 分页或增量读取批量结果，需要 Bearer 凭据 |
-| `POST /nominatim/altview/place-batches` | Altview Android 专用代理；凭据只保存在 Nominatim Cache 服务环境中 |
-| `GET /nominatim/altview/place-batches/{job_id}` | Altview 批次状态代理 |
-| `GET /nominatim/altview/place-batches/{job_id}/results` | Altview 增量结果代理 |
 | `GET /nominatim/health` | 就绪检查。JSON 含 `status`、`version`、`commit`、`database_ready`、`timestamp` 和 `uptime`。数据库不可用返回 503 |
 | `GET /nominatim/help` | JSON 接口指南，包含调用示例、字段说明、状态码与重试约定 |
 
@@ -69,7 +64,7 @@ curl -u admin:admin123 http://localhost:3000/admin/stats
 
 `GET /nominatim/help` 的 `batch` 字段应给出完整的批量提交、轮询和结果读取步骤；`batch.enabled=false` 表示服务端尚未配置调用凭据，批量 API 暂不可用。
 
-Altview Android 不适合直接携带通用 Bearer 凭据：APK 可被提取，密钥无法保密。服务端通过 `ALTVIEW_BATCH_BEARER_TOKEN` 配置一个调用方 ID 为 `altview-android` 的专用凭据，窄代理将请求转入同一通用批量队列，任务和结果仍由该调用方隔离。环境变量留空时代理返回 404；令牌被撤销或指向其他调用方时返回 503。该代理只接受与通用批量接口一致的坐标、幂等键和异步任务，不接收照片或 EXIF。Nginx 对代理提交及轮询复用批量 API 的按 IP 限流。
+统计接口支持 `days=7|30|90|365`。报表展示请求数、提交点数、缓存命中、需上游处理点数、错误数和响应耗时，并按服务端凭据识别的调用方、接口类型、客户端平台、版本及日期汇总。单点接口仍允许匿名使用；调用方可选传同一管理后台签发的 Bearer 密钥以归属统计。`X-Client-Platform` 和 `X-Client-Version` 是客户端自报标签，不用于鉴权。批量状态及结果轮询计为 API 请求，不重复计为新提交点。明细事件保留 90 天，之后汇总长期保留；不记录 IP 或坐标到该统计表。
 
 ### 批量逆地理编码（Go v2）
 
@@ -87,9 +82,9 @@ Altview Android 不适合直接携带通用 Bearer 凭据：APK 可被提取，�
 
 ### 公网批量反查
 
-普通调用方使用同一组通用批量接口，不按应用拆分队列；提交需带 `Authorization: Bearer <token>` 和 `Idempotency-Key`。Altview Android 使用上述服务端窄代理，避免把凭据打进 APK，但最终仍以 `altview-android` 调用方进入相同 API、队列和限流规则。管理员在 `/ops/nominatim/credentials.html` 创建调用方 ID、说明标签和凭据；数据库保存 SHA-256 鉴权摘要和加密密文。每批最多 `BATCH_LIMIT` 个点，任务及结果只对对应调用方开放。Raven 对提交和结果查询分别按来源 IP 限流。
+所有调用方使用同一组通用批量接口和队列；提交需带 `Authorization: Bearer <token>` 和 `Idempotency-Key`。管理员在 `/ops/nominatim/credentials.html` 创建调用方 ID、说明标签和凭据；数据库保存 SHA-256 鉴权摘要和加密密文。每批最多 `BATCH_LIMIT` 个点，任务及结果只对对应调用方开放。Raven 对提交和结果查询分别按来源 IP 限流。
 
-调用方 ID 是稳定名称，建议按应用及平台区分，例如 `altview-android`、`travelody-web`。客户端不另传 App ID，服务端根据 Bearer 密钥识别调用方。管理后台可查看密钥并记录查看时间；限制管理账号权限，避免无关人员读取。轮换时先为同一调用方创建新密钥、更新客户端，再撤销旧密钥。当前接口没有终端 ID 字段，不会区分同一应用的具体安装设备。
+调用方 ID 是稳定名称，建议按应用及平台区分，例如 `travelody-web`、`field-android`。客户端不另传 App ID，服务端根据 Bearer 密钥识别调用方。管理后台可查看密钥并记录查看时间；限制管理账号权限，避免无关人员读取。轮换时先为同一调用方创建新密钥、更新客户端，再撤销旧密钥。当前接口没有终端 ID 字段，不会区分同一应用的具体安装设备。
 
 批次按规模进入不同优先级：少于 10 个去重坐标的小批量优先于普通批量，单点反查优先级最高。所有任务仍共用上游速率限制。结果接口支持 `page` 分页和 `cursor` 增量读取。调用方可每次请求 `limit=50`、`wait=8`，处理响应后保存 `next_cursor` 并继续请求，直到 `has_more=false` 且任务已完成。增量模式只返回新完成的条目，不重复发送先前已读结果。
 
@@ -453,6 +448,8 @@ Authorization: Basic YWRtaW46YWRtaW4xMjM=
 新写入日志的 `response_body` 是接口本次实际发送的正文，包括缓存命中和没有采用上游结果的请求。历史记录中未保存的字段返回 `null`。详情适用于已写入访问日志的同步反查，入口拒绝、非法坐标和并发繁忙的提前返回不在此日志内。不存在或已过期的日志返回 404，非法 ID 返回 400。
 
 Go v2 的 `GET /admin/stats/daily` 可传 `days`（1–366，默认 7）。每日统计由仍保留的访问日志与已清理日志的汇总合并，使用服务配置的统计时区。
+
+Go v2 的 `GET /admin/stats/usage?days=30`（后台页面 `/ops/nominatim/usage.html`）按调用方、接口类型、平台、客户端版本和日期返回 API 用量。`days` 支持 7、30、90 或 365。所有批量接口共用 `/api/reverse/batches`；后台按 Bearer 凭据识别调用方，不使用应用专属路由。单点反查仍可匿名调用；如要归属到调用方，可选传同一 Bearer 凭据。可选的 `X-Client-Platform` 与 `X-Client-Version` 仅作统计标签，服务端会限制字符与长度，不作为身份凭据。状态和结果轮询计请求次数，但不计为新提交点。服务端记录的 429 会进入限流统计；Nginx 在请求抵达 Go 服务前生成的限流响应不包含在该报表中。事件明细保留 90 天，后台按日汇总并长期保留；这份统计不保存来源 IP 和坐标。统计从此版本上线后开始，旧访问记录缺少调用方和接口维度，无法追溯填入这些报表。
 
 ---
 

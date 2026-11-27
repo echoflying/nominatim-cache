@@ -38,25 +38,33 @@ type Batch struct {
 	Failed     int    `json:"failed"`
 }
 
-func (s Store) SubmitBatch(ctx context.Context, caller, requestKey, hash string, points []geocode.Point, pendingLimit int, hasSource bool) (string, error) {
+type BatchSubmissionMetrics struct {
+	CacheHits      int
+	UpstreamPoints int
+	Replayed       bool
+}
+
+func (s Store) SubmitBatch(ctx context.Context, caller, requestKey, hash string, points []geocode.Point, pendingLimit int, hasSource bool) (string, BatchSubmissionMetrics, error) {
+	metrics := BatchSubmissionMetrics{}
 	tx, err := s.DB.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelReadCommitted})
 	if err != nil {
-		return "", err
+		return "", metrics, err
 	}
 	defer tx.Rollback()
 	// 同一个调用方的幂等检查与额度计算必须串行。
 	if _, err := tx.ExecContext(ctx, "INSERT INTO batch_callers (caller) VALUES (?) ON DUPLICATE KEY UPDATE caller=VALUES(caller)", caller); err != nil {
-		return "", err
+		return "", metrics, err
 	}
 	var id, priorHash string
 	err = tx.QueryRowContext(ctx, "SELECT id,input_hash FROM batch_jobs WHERE caller=? AND request_key=?", caller, requestKey).Scan(&id, &priorHash)
 	switch {
 	case err == nil && hash == priorHash:
-		return id, nil
+		metrics.Replayed = true
+		return id, metrics, nil
 	case err == nil:
-		return "", ErrBatchConflict
+		return "", metrics, ErrBatchConflict
 	case !errors.Is(err, sql.ErrNoRows):
-		return "", err
+		return "", metrics, err
 	}
 
 	byKey := make(map[string]geocode.Point)
@@ -74,7 +82,12 @@ func (s Store) SubmitBatch(ctx context.Context, caller, requestKey, hash string,
 	}
 	cached, err := batchCache(ctx, tx, byKey)
 	if err != nil {
-		return "", err
+		return "", metrics, err
+	}
+	for _, key := range keys {
+		if cached[key] != nil {
+			metrics.CacheHits++
+		}
 	}
 
 	var pending int
@@ -87,10 +100,15 @@ func (s Store) SubmitBatch(ctx context.Context, caller, requestKey, hash string,
 		if pending > 0 {
 			var existing int
 			if err := tx.QueryRowContext(ctx, "SELECT COUNT(*) FROM batch_jobs j JOIN batch_items i ON i.job_id=j.id WHERE j.caller=? AND j.finished_at IS NULL AND i.status='pending'", caller).Scan(&existing); err != nil {
-				return "", err
+				return "", metrics, err
 			}
 			if existing+pending > pendingLimit {
-				return "", ErrBatchQuota
+				return "", metrics, ErrBatchQuota
+			}
+		}
+		for key := range byKey {
+			if cached[key] == nil {
+				metrics.UpstreamPoints++
 			}
 		}
 	}
@@ -102,7 +120,7 @@ func (s Store) SubmitBatch(ctx context.Context, caller, requestKey, hash string,
 	id = randomID()
 	if _, err := tx.ExecContext(ctx, "INSERT INTO batch_jobs (id,caller,request_key,input_hash,created_at,finished_at,priority) VALUES (?,?,?,?,?,?,?)",
 		id, caller, requestKey, hash, now, finished, priority); err != nil {
-		return "", err
+		return "", metrics, err
 	}
 	if pending > 0 {
 		ordered := make([]string, 0, len(byKey))
@@ -116,7 +134,7 @@ func (s Store) SubmitBatch(ctx context.Context, caller, requestKey, hash string,
 			strings.Join(slices.Repeat([]string{"(?,?,?,?,?,?)"}, len(ordered)), ",")+
 			" ON DUPLICATE KEY UPDATE priority=LEAST(priority,VALUES(priority))",
 			taskArgs(ordered, byKey, now, priority)...); err != nil {
-			return "", err
+			return "", metrics, err
 		}
 	}
 	args := make([]any, 0, 8*len(points))
@@ -133,13 +151,13 @@ func (s Store) SubmitBatch(ctx context.Context, caller, requestKey, hash string,
 	}
 	if _, err := tx.ExecContext(ctx, "INSERT INTO batch_items (job_id,ordinal,lat,lon,cache_key,status,result,last_error) VALUES "+
 		strings.Join(slices.Repeat([]string{"(?,?,?,?,?,?,?,?)"}, len(points)), ","), args...); err != nil {
-		return "", err
+		return "", metrics, err
 	}
 	if _, err := tx.ExecContext(ctx, `INSERT IGNORE INTO batch_result_events (job_id,ordinal)
 		SELECT job_id,ordinal FROM batch_items WHERE job_id=? AND status<>'pending' ORDER BY ordinal`, id); err != nil {
-		return "", err
+		return "", metrics, err
 	}
-	return id, tx.Commit()
+	return id, metrics, tx.Commit()
 }
 
 func taskArgs(keys []string, points map[string]geocode.Point, now int64, priority geocode.RequestPriority) []any {

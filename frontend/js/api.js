@@ -54,6 +54,13 @@ class NominatimAPI {
     return result.data;
   }
 
+  async getUsageStats(days = 30) {
+    const response = await this.authenticatedFetch(`${this.baseUrl}/admin/stats/usage?days=${encodeURIComponent(days)}`);
+    const result = await response.json();
+    if (!result.success) throw new Error(result.error || '读取调用统计失败');
+    return result.data;
+  }
+
   async listBatchCredentials() {
     const response = await this.authenticatedFetch(`${this.baseUrl}/admin/batch-credentials`);
     const result = await response.json();

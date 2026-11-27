@@ -19,17 +19,46 @@ import (
 var errColdBusy = errors.New("Reverse lookup busy")
 
 func (s Server) reverse(w http.ResponseWriter, r *http.Request) {
+	if authorization := strings.TrimSpace(r.Header.Get("Authorization")); authorization != "" {
+		setUsageCaller(r, "invalid_credential")
+		scheme, token, ok := strings.Cut(authorization, " ")
+		caller := ""
+		if ok && strings.EqualFold(scheme, "Bearer") && strings.TrimSpace(token) != "" {
+			var err error
+			caller, _, err = s.Store.ResolveBatchCredential(r.Context(), strings.TrimSpace(token))
+			if err != nil {
+				batchError(w, err)
+				return
+			}
+		}
+		if caller == "" {
+			w.Header().Set("WWW-Authenticate", "Bearer")
+			fail(w, http.StatusUnauthorized, "Invalid bearer token")
+			return
+		}
+		setUsageCaller(r, caller)
+	}
 	query := r.URL.Query()
 	point, valid := coordinates(query.Get("lat"), query.Get("lon"))
 	if !valid {
 		fail(w, http.StatusBadRequest, "Invalid coordinates")
 		return
 	}
+	if capture := captureFromRequest(r); capture != nil {
+		capture.points = 1
+	}
 	key := point.Key()
 	timeout, logTimeout := s.reverseBudgets(r.Host)
 	ctx, cancel := context.WithTimeout(r.Context(), timeout)
 	defer cancel()
 	response, cached, upstream, err := s.lookup(ctx, point, key)
+	if capture := captureFromRequest(r); capture != nil {
+		if cached != nil {
+			capture.cacheHits = 1
+		} else if upstream.ArchiveID > 0 {
+			capture.upstreamPoints = 1
+		}
+	}
 	status := http.StatusOK
 	if err == nil {
 		if response.Text("place_quality") == "coarse" {

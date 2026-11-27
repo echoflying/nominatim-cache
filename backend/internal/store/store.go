@@ -368,6 +368,9 @@ func (s Store) Daily(ctx context.Context, now time.Time, days int) ([]Day, error
 }
 
 func (s Store) Prune(ctx context.Context, now time.Time, logRetention, batchRetention time.Duration) error {
+	if err := s.RollupAPIEvents(ctx, now.Add(-90*24*time.Hour)); err != nil {
+		return err
+	}
 	for {
 		count, err := s.rollUpAccessLogs(ctx, now.Add(-logRetention))
 		if err != nil {

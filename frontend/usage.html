@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Nominatim Cache · 调用统计</title>
+  <link rel="stylesheet" href="vendor/tabler.min.css?v=20261127-9">
+  <link rel="stylesheet" href="css/style.css?v=20261127-9">
+</head>
+<body>
+  <main class="admin-content">
+    <header class="page-heading">
+      <div><h1>调用统计</h1><p class="text-secondary mb-0">按调用方、接口类型、平台和版本查看用量</p></div>
+      <div class="heading-actions"><select class="form-select" id="rangeSelect" aria-label="统计时间范围"><option value="7">近 7 天</option><option value="30" selected>近 30 天</option><option value="90">近 90 天</option><option value="365">近 365 天</option></select><button class="btn btn-outline-secondary" id="refreshBtn"><span data-icon="refresh"></span> 刷新</button></div>
+    </header>
+    <div id="usageStatus" class="text-secondary small mb-3" role="status">正在读取…</div>
+    <section class="stats-grid" aria-label="调用统计摘要">
+      <article class="card stat-card"><span class="stat-icon azure" data-icon="activity"></span><div><div class="stat-label">API 请求</div><strong class="stat-value" id="requests">-</strong></div></article>
+      <article class="card stat-card"><span class="stat-icon blue" data-icon="database"></span><div><div class="stat-label">提交点数</div><strong class="stat-value" id="points">-</strong></div></article>
+      <article class="card stat-card"><span class="stat-icon green" data-icon="circle-check"></span><div><div class="stat-label">缓存命中</div><strong class="stat-value" id="cacheHits">-</strong></div></article>
+      <article class="card stat-card"><span class="stat-icon orange" data-icon="chart-bar"></span><div><div class="stat-label">需上游处理点</div><strong class="stat-value" id="upstreamPoints">-</strong></div></article>
+    </section>
+    <div class="row row-cards mt-3">
+      <section class="col-md-6"><div class="card"><div class="card-header"><h2 class="card-title">按调用方</h2></div><div class="table-responsive"><table class="table table-vcenter"><thead><tr><th>调用方</th><th class="text-end">请求</th><th class="text-end">点数</th><th class="text-end">缓存命中</th></tr></thead><tbody id="callerRows"></tbody></table></div></div></section>
+      <section class="col-md-6"><div class="card"><div class="card-header"><h2 class="card-title">按调用方式</h2></div><div class="table-responsive"><table class="table table-vcenter"><thead><tr><th>接口</th><th class="text-end">请求</th><th class="text-end">点数</th><th class="text-end">错误</th></tr></thead><tbody id="operationRows"></tbody></table></div></div></section>
+      <section class="col-md-6"><div class="card"><div class="card-header"><h2 class="card-title">按客户端平台</h2></div><div class="table-responsive"><table class="table table-vcenter"><thead><tr><th>平台</th><th class="text-end">请求</th><th class="text-end">点数</th><th class="text-end">平均耗时</th></tr></thead><tbody id="platformRows"></tbody></table></div></div></section>
+      <section class="col-md-6"><div class="card"><div class="card-header"><h2 class="card-title">按客户端版本</h2></div><div class="table-responsive"><table class="table table-vcenter"><thead><tr><th>版本</th><th class="text-end">请求</th><th class="text-end">点数</th><th class="text-end">错误</th></tr></thead><tbody id="versionRows"></tbody></table></div></div></section>
+      <section class="col-12"><div class="card"><div class="card-header"><h2 class="card-title">每日趋势</h2></div><div class="table-responsive"><table class="table table-vcenter"><thead><tr><th>日期</th><th class="text-end">请求</th><th class="text-end">点数</th><th class="text-end">命中</th><th class="text-end">上游处理</th><th class="text-end">服务端429</th><th class="text-end">错误</th><th class="text-end">平均耗时</th></tr></thead><tbody id="dailyRows"></tbody></table></div></div></section>
+    </div>
+    <footer class="admin-footer">Nominatim Cache <span>批量轮询计请求，不重复计入提交点数</span></footer>
+  </main>
+  <script src="js/admin-shell.js?v=20261127-9"></script>
+  <script src="js/api.js?v=20261127-9"></script>
+  <script src="js/usage.js?v=20261127-9"></script>
+</body>
+</html>
