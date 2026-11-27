@@ -23,7 +23,7 @@ document.addEventListener('DOMContentLoaded', () => {
       return true;
     } catch (error) {
       console.error('加载最近请求失败:', error);
-      tableBody.innerHTML = `<tr><td colspan="6" class="table-loading">加载失败: ${escapeHtml(error.message)}</td></tr>`;
+      tableBody.innerHTML = `<tr><td colspan="7" class="table-loading">加载失败: ${escapeHtml(error.message)}</td></tr>`;
       if (isAuthError(error)) {
         stopPolling();
         requestStatus.textContent = '认证失败，请点击立即刷新';
@@ -51,6 +51,7 @@ document.addEventListener('DOMContentLoaded', () => {
         <td>${formatDate(entry.accessed_at)}</td>
         <td>${formatCoords(entry.lat, entry.lon)}</td>
         <td>${entry.cached ? '<span class="success-badge">命中</span>' : '<span class="fail-badge">未命中</span>'}</td>
+        <td>${entry.place_name ? escapeHtml(entry.place_name) : '<span class="text-secondary">—</span>'}</td>
         <td class="text-nowrap">${entry.source ? escapeHtml(formatSource(entry.source)) : '<span class="text-secondary">未记录</span>'}</td>
         <td title="${escapeHtml(entry.cache_key || '')}">${escapeHtml(truncateText(entry.cache_key || '-', 36))}</td>
         <td class="text-end">${detailButton}</td>

@@ -371,7 +371,7 @@ Authorization: Basic YWRtaW46YWRtaW4xMjM=
 
 获取最近的访问日志。
 
-Go v2 的每条摘要包含 `source`。回源时是本次采用的上游名称，缓存命中时是请求当时记录的缓存来源，人工录入为 `manual`。无可用来源时返回 `null`。
+Go v2 的每条摘要包含 `source` 和 `place_name`。`source` 在回源时是本次采用的上游名称，缓存命中时是请求当时记录的缓存来源，人工录入为 `manual`；无可用来源时返回 `null`。`place_name` 从本次实际下发的响应正文提取，没有短地名或旧记录未保存响应时返回 `null`。
 
 **请求:**
 ```
@@ -401,6 +401,7 @@ Authorization: Basic YWRtaW46YWRtaW4xMjM=
       "lon": 120.1615,
       "cached": 1,
       "source": "openstreetmap.org",
+      "place_name": "西湖区",
       "accessed_at": 1704153600,
       "accessed_at_str": "2024-01-02 10:00:00"
     },
@@ -411,6 +412,7 @@ Authorization: Basic YWRtaW46YWRtaW4xMjM=
       "lon": 121.4737,
       "cached": 0,
       "source": "photon.komoot.io",
+      "place_name": "黄龙洞",
       "accessed_at": 1704153598,
       "accessed_at_str": "2024-01-02 09:59:58"
     }

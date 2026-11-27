@@ -274,14 +274,15 @@ func (s Store) RecordAccess(ctx context.Context, p geocode.Point, key string, st
 }
 
 type AccessLog struct {
-	ID     int64    `json:"id"`
-	Key    *string  `json:"cache_key"`
-	Lat    *float64 `json:"lat"`
-	Lon    *float64 `json:"lon"`
-	Hit    int      `json:"cached"`
-	Source *string  `json:"source"`
-	At     int64    `json:"accessed_at"`
-	Label  string   `json:"accessed_at_str"`
+	ID        int64    `json:"id"`
+	Key       *string  `json:"cache_key"`
+	Lat       *float64 `json:"lat"`
+	Lon       *float64 `json:"lon"`
+	Hit       int      `json:"cached"`
+	Source    *string  `json:"source"`
+	PlaceName *string  `json:"place_name"`
+	At        int64    `json:"accessed_at"`
+	Label     string   `json:"accessed_at_str"`
 }
 
 type AccessLogDetail struct {
@@ -317,7 +318,8 @@ func (s Store) Logs(ctx context.Context, hit *int, zone *time.Location, limit, o
 		return nil, 0, err
 	}
 	rows, err := s.DB.QueryContext(ctx, `SELECT l.id,l.cache_key,l.lat,l.lon,l.cached,l.accessed_at,
-		CASE WHEN l.cached=1 THEN COALESCE(a.source,NULLIF(r.cache_original_source,'')) ELSE r.upstream_source END
+		CASE WHEN l.cached=1 THEN COALESCE(a.source,NULLIF(r.cache_original_source,'')) ELSE r.upstream_source END,
+		CASE WHEN JSON_VALID(r.response_body) THEN NULLIF(JSON_UNQUOTE(JSON_EXTRACT(r.response_body,'$.place_name')),'') END
 		FROM access_logs l LEFT JOIN access_log_responses r ON r.access_log_id=l.id
 		LEFT JOIN upstream_archive a ON a.id=r.cache_original_archive_id`+where+
 		" ORDER BY l.accessed_at DESC,l.id DESC LIMIT ? OFFSET ?", append(args, limit, offset)...)
@@ -328,7 +330,7 @@ func (s Store) Logs(ctx context.Context, hit *int, zone *time.Location, limit, o
 	result := make([]AccessLog, 0)
 	for rows.Next() {
 		var item AccessLog
-		if err := rows.Scan(&item.ID, &item.Key, &item.Lat, &item.Lon, &item.Hit, &item.At, &item.Source); err != nil {
+		if err := rows.Scan(&item.ID, &item.Key, &item.Lat, &item.Lon, &item.Hit, &item.At, &item.Source, &item.PlaceName); err != nil {
 			return nil, 0, err
 		}
 		item.Label = time.UnixMilli(item.At).In(zone).Format("2006/1/2 15:04:05")
