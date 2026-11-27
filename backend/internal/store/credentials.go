@@ -39,7 +39,7 @@ func (s Store) CreateBatchCredential(ctx context.Context, callerID, label string
 	token := "ncc_live_" + base64.RawURLEncoding.EncodeToString(random[:])
 	sum := sha256.Sum256([]byte(token))
 	hash := hex.EncodeToString(sum[:])
-	hint := token[:17] + "…" + token[len(token)-6:]
+	hint := token[:12] + "..." + token[len(token)-6:]
 	now := time.Now().UnixMilli()
 	result, err := s.DB.ExecContext(ctx, `INSERT INTO batch_credentials
 		(caller_id,label,token_hash,token_hint,created_at) VALUES (?,?,?,?,?)`, callerID, label, hash, hint, now)
