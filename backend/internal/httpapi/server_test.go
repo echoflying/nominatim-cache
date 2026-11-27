@@ -86,7 +86,6 @@ func TestAdminEndpointsAreNotExposedOnPublicListener(t *testing.T) {
 func TestGenericBatchRequiresCallerCredentialAndAllowsCors(t *testing.T) {
 	handler := (Server{Config: config.Config{
 		BasePath: "/nominatim",
-		Tokens:   map[string]string{"test-caller": "this-is-a-long-enough-test-bearer-token"},
 	}}).Handler()
 	preflight := httptest.NewRecorder()
 	handler.ServeHTTP(preflight, httptest.NewRequest(http.MethodOptions, "/nominatim/api/reverse/batches", nil))
@@ -96,10 +95,9 @@ func TestGenericBatchRequiresCallerCredentialAndAllowsCors(t *testing.T) {
 
 	missingKey := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/nominatim/api/reverse/batches", strings.NewReader(`{"points":[{"lat":30,"lon":120}]}`))
-	req.Header.Set("Authorization", "Bearer this-is-a-long-enough-test-bearer-token")
 	handler.ServeHTTP(missingKey, req)
-	if missingKey.Code != http.StatusBadRequest {
-		t.Fatalf("generic batch should validate the idempotency key before storage, got %d", missingKey.Code)
+	if missingKey.Code != http.StatusNotFound {
+		t.Fatalf("generic batch should be disabled without a configured credential store, got %d", missingKey.Code)
 	}
 
 	privateRoute := httptest.NewRecorder()

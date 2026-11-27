@@ -54,6 +54,29 @@ class NominatimAPI {
     return result.data;
   }
 
+  async listBatchCredentials() {
+    const response = await this.authenticatedFetch(`${this.baseUrl}/admin/batch-credentials`);
+    const result = await response.json();
+    if (!result.success) throw new Error(result.error || '读取调用方凭据失败');
+    return result.data;
+  }
+
+  async createBatchCredential(data) {
+    const response = await this.authenticatedFetch(`${this.baseUrl}/admin/batch-credentials`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data)
+    });
+    const result = await response.json();
+    if (!result.success) throw new Error(result.error || '创建调用方凭据失败');
+    return result.data;
+  }
+
+  async revokeBatchCredential(id) {
+    const response = await this.authenticatedFetch(`${this.baseUrl}/admin/batch-credentials/${encodeURIComponent(id)}`, { method: 'DELETE' });
+    const result = await response.json();
+    if (!result.success) throw new Error(result.error || '撤销调用方凭据失败');
+    return result.data;
+  }
+
   /**
    * 获取最近访问日志
    */

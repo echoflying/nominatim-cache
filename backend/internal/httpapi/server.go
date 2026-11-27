@@ -90,15 +90,20 @@ func (s Server) Handler() http.Handler {
 	})
 }
 
-func (s Server) help(w http.ResponseWriter, _ *http.Request) {
+func (s Server) help(w http.ResponseWriter, r *http.Request) {
 	base := s.Config.BasePath
+	batchEnabled, _ := s.Store.BatchCredentialsEnabled(r.Context())
+	batchLimit := s.Config.BatchLimit
+	if batchLimit <= 0 {
+		batchLimit = 500
+	}
 	w.Header().Set("Cache-Control", "no-store")
 	writeJSON(w, http.StatusOK, jsonObject{
 		"service":     "nominatim-cache",
 		"description": "以经纬度反查地点。返回用于分组的短地名，也保留完整地址。",
 		"endpoints": []jsonObject{
 			{"method": "GET", "path": base + "/reverse", "description": "按坐标反查地名"},
-			{"method": "POST", "path": base + "/api/reverse/batches", "description": "提交通用批量反查，需要 Bearer 凭据，每批最多 500 个坐标"},
+			{"method": "POST", "path": base + "/api/reverse/batches", "description": "提交通用批量反查，需要 Bearer 凭据；最大数量见 batch.max_points_per_job"},
 			{"method": "GET", "path": base + "/api/reverse/batches/{job_id}", "description": "查看调用方自己的批量任务状态，需要 Bearer 凭据"},
 			{"method": "GET", "path": base + "/api/reverse/batches/{job_id}/results", "description": "分页或按游标读取批量结果，需要 Bearer 凭据"},
 			{"method": "GET", "path": base + "/health", "description": "检查数据库就绪状态，并返回版本和提交"},
@@ -119,12 +124,19 @@ func (s Server) help(w http.ResponseWriter, _ *http.Request) {
 			"batch_results":  "结果接口支持按 page/limit 分页，或使用 cursor、limit=1..50、wait=0..10 秒增量读取新完成项。",
 		},
 		"batch": map[string]any{
-			"enabled":               len(s.Config.Tokens) > 0,
-			"authentication":        "Authorization: Bearer <token>；由 BATCH_TOKENS 配置调用方凭据。",
-			"max_points_per_job":    500,
-			"small_batch_threshold": "去重后少于 10 个坐标",
-			"priority":              "单点反查优先级最高；小批量其次；大批量会随等待时间逐步提升。该顺序不会提高上游请求频率。",
-			"result_polling":        "结果接口兼容 page/limit 分页；增量方式使用 cursor=0、limit=50、wait=8，并在后续请求中传入 next_cursor。每项结果只返回一次，任务保留 7 天。",
+			"enabled":                         batchEnabled,
+			"authentication":                  "Authorization: Bearer <token>；在运维后台的调用方凭据页创建。密钥仅创建时显示一次。",
+			"credential_management":           "/ops/nominatim/credentials.html",
+			"max_points_per_job":              batchLimit,
+			"pending_points_limit_per_caller": s.Config.PendingLimit,
+			"caller_id_format":                "小写字母开头，后续可含小写字母、数字、点、下划线和短横线；按调用方平台分别创建。没有终端 ID。",
+			"submit":                          map[string]any{"method": "POST", "path": base + "/api/reverse/batches", "headers": map[string]string{"Authorization": "Bearer <token>", "Idempotency-Key": "1 至 128 字节；相同键和相同坐标内容复用任务"}, "body": jsonObject{"points": []jsonObject{{"lat": 30.28746, "lon": 120.16145}}}, "success_status": 202, "response": "返回 job_id、status_url 和 results_url；轮询 status_url 或读取 results_url。"},
+			"status_path":                     base + "/api/reverse/batches/{job_id}",
+			"results_path":                    base + "/api/reverse/batches/{job_id}/results?cursor=0&limit=50&wait=8",
+			"poll_interval_seconds":           2,
+			"small_batch_threshold":           "去重后少于 10 个坐标",
+			"priority":                        "单点反查优先级最高；小批量其次；大批量会随等待时间逐步提升。该顺序不会提高上游请求频率。",
+			"result_polling":                  "结果接口兼容 page/limit 分页；增量方式使用 cursor=0、limit=50、wait=8，并在后续请求中传入 next_cursor。每项结果只返回一次，任务保留 7 天。状态为 pending、running、completed 或 completed_with_errors；结果项为 cached、resolved、pending、running、no_result 或 failed。",
 		},
 		"status_codes": map[string]string{
 			"200": "查询完成。没有合适的短地名时 place_name 可为空。",
@@ -137,7 +149,7 @@ func (s Server) help(w http.ResponseWriter, _ *http.Request) {
 			"503": "反查繁忙或数据库未就绪。存在 Retry-After 时按其退避。",
 			"504": "公网入口等待反查结果超时。",
 		},
-		"access": "单点反查免认证。批量反查需使用服务端配置的 Bearer 凭据；管理接口需管理认证。",
+		"access": "单点反查免认证。批量反查需使用运维后台创建的 Bearer 凭据；管理接口需管理认证。",
 	})
 }
 
@@ -153,9 +165,13 @@ func (s Server) AdminHandler() http.Handler {
 	routes.HandleFunc("GET /admin/logs/{id}", s.admin(s.logDetail))
 	routes.HandleFunc("GET /admin/stats", s.admin(s.stats))
 	routes.HandleFunc("GET /admin/stats/daily", s.admin(s.daily))
+	routes.HandleFunc("GET /admin/batch-credentials", s.admin(s.listBatchCredentials))
+	routes.HandleFunc("POST /admin/batch-credentials", s.admin(s.createBatchCredential))
+	routes.HandleFunc("DELETE /admin/batch-credentials/{id}", s.admin(s.revokeBatchCredential))
 	routes.HandleFunc("GET /{$}", s.asset("index.html"))
 	routes.HandleFunc("GET /list.html", s.asset("list.html"))
 	routes.HandleFunc("GET /requests.html", s.asset("requests.html"))
+	routes.HandleFunc("GET /credentials.html", s.asset("credentials.html"))
 	static := http.FileServer(http.Dir(s.Config.Frontend))
 	revalidateStatic := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Cache-Control", "no-cache")

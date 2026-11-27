@@ -17,6 +17,7 @@
     'chevron-right': '<path d="m9 6 6 6-6 6"/>',
     x: '<path d="m18 6-12 12M6 6l12 12"/>',
     'database-plus': '<ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v6c0 1.7 3.6 3 8 3M4 11v6c0 1.7 3.6 3 8 3M20 11v2M17 5v5"/><path d="M16 17h6M19 14v6"/>',
+    key: '<circle cx="8" cy="15" r="5"/><path d="m21 2-9.6 9.6M15.5 7.5l3 3L22 7l-3-3"/>',
     'menu-2': '<path d="M4 6h16M4 12h16M4 18h16"/>'
   };
   const icon = name => `<svg class="icon" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${icons[name] || ''}</svg>`;
@@ -29,11 +30,11 @@
 
   const content = document.querySelector('.admin-content');
   if (!content) return;
-  const current = location.pathname.endsWith('/list.html') ? 'cache' : location.pathname.endsWith('/requests.html') ? 'requests' : 'overview';
+  const current = location.pathname.endsWith('/list.html') ? 'cache' : location.pathname.endsWith('/requests.html') ? 'requests' : location.pathname.endsWith('/credentials.html') ? 'credentials' : 'overview';
   const link = (key, href, label, iconName) => `<a class="nav-link${current === key ? ' active' : ''}" href="${href}"${current === key ? ' aria-current="page"' : ''}><span class="nav-link-icon">${icon(iconName)}</span><span>${label}</span></a>`;
   const shell = document.createElement('div');
   shell.className = 'admin-shell';
-  shell.innerHTML = `<aside class="admin-sidebar" id="adminSidebar"><a class="brand-link" href="./"><span class="brand-mark">NC</span><span><strong>Nominatim Cache</strong><small>地点服务管理</small></span></a><div class="nav-section">服务管理</div><nav class="admin-nav" aria-label="管理导航">${link('overview','./','服务概览','layout-dashboard')}${link('cache','list.html','缓存清单','database')}${link('requests','requests.html','最近请求','list-details')}</nav><div class="sidebar-footer"><span class="sidebar-status"></span>地点缓存服务</div></aside><button class="sidebar-scrim" type="button" aria-label="关闭菜单"></button><div class="admin-main"><header class="admin-topbar"><button class="btn btn-icon btn-ghost-secondary mobile-menu" type="button" aria-label="打开导航">${icon('menu-2')}</button><div class="topbar-path"><span>运维中心</span><span class="path-divider">/</span><strong>地点服务</strong></div><span class="topbar-badge">NOMINATIM CACHE</span></header><div class="admin-page-body"></div></div>`;
+  shell.innerHTML = `<aside class="admin-sidebar" id="adminSidebar"><a class="brand-link" href="./"><span class="brand-mark">NC</span><span><strong>Nominatim Cache</strong><small>地点服务管理</small></span></a><div class="nav-section">服务管理</div><nav class="admin-nav" aria-label="管理导航">${link('overview','./','服务概览','layout-dashboard')}${link('cache','list.html','缓存清单','database')}${link('requests','requests.html','最近请求','list-details')}${link('credentials','credentials.html','调用方凭据','key')}</nav><div class="sidebar-footer"><span class="sidebar-status"></span>地点缓存服务</div></aside><button class="sidebar-scrim" type="button" aria-label="关闭菜单"></button><div class="admin-main"><header class="admin-topbar"><button class="btn btn-icon btn-ghost-secondary mobile-menu" type="button" aria-label="打开导航">${icon('menu-2')}</button><div class="topbar-path"><span>运维中心</span><span class="path-divider">/</span><strong>地点服务</strong></div><span class="topbar-badge">NOMINATIM CACHE</span></header><div class="admin-page-body"></div></div>`;
   shell.querySelector('.admin-page-body').append(content);
   document.body.prepend(shell);
   new MutationObserver(records => records.forEach(record => record.addedNodes.forEach(node => {

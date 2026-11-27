@@ -19,7 +19,6 @@ type Config struct {
 	AdminListen, AdminUser, AdminPass            string
 	LegacyHost                                   string
 	Location                                     *time.Location
-	Tokens                                       map[string]string
 	Sources                                      []geocode.SourceConfig
 	BatchSource                                  *geocode.SourceConfig
 	Interval, UpstreamTimeout, ReverseTimeout    time.Duration
@@ -35,7 +34,6 @@ func Load() (Config, error) {
 		AdminListen: env("ADMIN_LISTEN_ADDR", "127.0.0.1:3001"),
 		LegacyHost:  strings.ToLower(strings.TrimSuffix(env("LEGACY_HOST", "nc.zaitu.cn"), ".")),
 		AdminUser:   env("ADMIN_USERNAME", "admin"), AdminPass: env("ADMIN_PASSWORD", "admin123"),
-		Tokens: make(map[string]string),
 	}
 	if cfg.DSN == "" {
 		return cfg, errors.New("MARIADB_DSN is required")
@@ -57,18 +55,6 @@ func Load() (Config, error) {
 	cfg.Location, err = time.LoadLocation(env("STATS_TIMEZONE", "Asia/Shanghai"))
 	if err != nil {
 		return cfg, errors.New("invalid STATS_TIMEZONE")
-	}
-	usedTokens := make(map[string]bool)
-	for pair := range strings.SplitSeq(os.Getenv("BATCH_TOKENS"), ",") {
-		if pair == "" {
-			continue
-		}
-		name, token, ok := strings.Cut(pair, "=")
-		if !ok || name == "" || len(name) > 64 || strings.TrimSpace(name) != name ||
-			len(token) < 24 || strings.ContainsAny(token, " \t\r\n") || cfg.Tokens[name] != "" || usedTokens[token] {
-			return cfg, errors.New("BATCH_TOKENS requires distinct caller=token pairs with tokens of at least 24 bytes")
-		}
-		cfg.Tokens[name], usedTokens[token] = token, true
 	}
 	for _, entry := range []struct {
 		key, name string

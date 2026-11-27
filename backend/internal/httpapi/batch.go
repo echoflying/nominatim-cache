@@ -21,17 +21,22 @@ import (
 func (s Server) batchAuth(next func(http.ResponseWriter, *http.Request, string)) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Cache-Control", "no-store")
-		if len(s.Config.Tokens) == 0 {
+		enabled, err := s.Store.BatchCredentialsEnabled(r.Context())
+		if err != nil {
+			batchError(w, err)
+			return
+		}
+		if !enabled {
 			fail(w, http.StatusNotFound, "Batch API disabled")
 			return
 		}
 		scheme, token, _ := strings.Cut(r.Header.Get("Authorization"), " ")
 		caller := ""
 		if strings.EqualFold(scheme, "Bearer") && token != "" {
-			for name, expected := range s.Config.Tokens {
-				if secureEqual(token, expected) {
-					caller = name
-				}
+			caller, enabled, err = s.Store.ResolveBatchCredential(r.Context(), token)
+			if err != nil {
+				batchError(w, err)
+				return
 			}
 		}
 		if caller == "" {
