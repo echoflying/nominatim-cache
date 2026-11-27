@@ -47,6 +47,8 @@ sudo bash install-raven-fresh.sh \
 
 2026-11-27（北京时间）发布 `v2.0.0-rc.12`，增加后台调用方凭据创建、列表和撤销，密钥仅创建时返回并只保存 SHA-256 摘要；应用兼容迁移 `007_compat006_batch_credentials.sql`。迁移前备份为 `/mnt/datadisk0/nominatim-cache/backups/nominatim-cache-before-rc12-20261127.sql.gz`。RC.12 随后由 `v2.0.0-rc.13` 替代，补齐概览、缓存和最近请求页的静态资源版本号，使新凭据导航在旧页面缓存下也能更新。RC.14 修正 ASCII 字段中的凭据提示格式。RC.15 增加独立密钥 AES-GCM 加密存储和运维后台按需查看，应用 `008_compat007_recoverable_batch_credentials.sql`。未创建调用方密钥；批量 API 继续关闭。
 
+2026-11-27（北京时间）发布 `v2.0.0-rc.16`（`3b7284c8e0d2951e6b29d55245e462f89adea2b2`）。上线前 MariaDB 备份为 `/mnt/datadisk0/nominatim-cache/backups/nominatim-cache-before-rc16-20261127.sql.gz`，SHA-256 为 `817e6bdbd07f929faca310169a3e1a05469a9493400b9da7bddebea63c652a20`。应用 `009_compat008_api_usage_stats.sql` 后切换服务。公网健康返回 RC16、数据库就绪；公网帮助页列出统一批量 API。管理监听统计页面返回 200，未认证的统计 API 返回 401。用量报表按调用方、接口类型、客户端平台和版本标签、状态、耗时与点数统计；明细保留 90 天并汇总到长期日表。旧日志不含调用方和接口维度，不回填到新报表。统计不采集 IP 和坐标。
+
 ### 旧站备份方法
 
 以下方法用于从仍在运行的旧版本制作独立快照。若已经拿到含 WAL 的归档，先用临时工作目录合成独立快照，再导入。
