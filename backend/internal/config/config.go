@@ -18,6 +18,7 @@ import (
 type Config struct {
 	DSN, Listen, Environment, Frontend, BasePath string
 	AdminListen, AdminUser, AdminPass            string
+	AltviewBatchToken                            string
 	CredentialEncryptionKey                      []byte
 	LegacyHost                                   string
 	Location                                     *time.Location
@@ -32,10 +33,11 @@ func Load() (Config, error) {
 	cfg := Config{
 		DSN: os.Getenv("MARIADB_DSN"), Listen: env("LISTEN_ADDR", "127.0.0.1:3000"),
 		Environment: env("APP_ENV", "development"), Frontend: env("FRONTEND_DIR", "../frontend"),
-		BasePath:    strings.TrimRight(os.Getenv("BASE_PATH"), "/"),
-		AdminListen: env("ADMIN_LISTEN_ADDR", "127.0.0.1:3001"),
-		LegacyHost:  strings.ToLower(strings.TrimSuffix(env("LEGACY_HOST", "nc.zaitu.cn"), ".")),
-		AdminUser:   env("ADMIN_USERNAME", "admin"), AdminPass: env("ADMIN_PASSWORD", "admin123"),
+		BasePath:          strings.TrimRight(os.Getenv("BASE_PATH"), "/"),
+		AltviewBatchToken: os.Getenv("ALTVIEW_BATCH_BEARER_TOKEN"),
+		AdminListen:       env("ADMIN_LISTEN_ADDR", "127.0.0.1:3001"),
+		LegacyHost:        strings.ToLower(strings.TrimSuffix(env("LEGACY_HOST", "nc.zaitu.cn"), ".")),
+		AdminUser:         env("ADMIN_USERNAME", "admin"), AdminPass: env("ADMIN_PASSWORD", "admin123"),
 	}
 	if cfg.DSN == "" {
 		return cfg, errors.New("MARIADB_DSN is required")

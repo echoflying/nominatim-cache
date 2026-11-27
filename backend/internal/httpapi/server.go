@@ -33,6 +33,7 @@ type Server struct {
 
 type jsonObject = map[string]any
 type prefixKey struct{}
+type batchPathKey struct{}
 
 func (s Server) Handler() http.Handler {
 	s.cold = make(chan struct{}, max(1, s.Config.ColdLimit))
@@ -44,6 +45,9 @@ func (s Server) Handler() http.Handler {
 	routes.HandleFunc("POST /api/reverse/batches", s.batchAuth(s.submitBatch))
 	routes.HandleFunc("GET /api/reverse/batches/{id}", s.batchAuth(s.batchStatus))
 	routes.HandleFunc("GET /api/reverse/batches/{id}/results", s.batchAuth(s.batchResults))
+	routes.HandleFunc("POST /altview/place-batches", s.altviewBatchAuth(s.submitBatch))
+	routes.HandleFunc("GET /altview/place-batches/{id}", s.altviewBatchAuth(s.batchStatus))
+	routes.HandleFunc("GET /altview/place-batches/{id}/results", s.altviewBatchAuth(s.batchResults))
 
 	mux := routes
 	if prefix := s.Config.BasePath; prefix != "" {
@@ -75,12 +79,29 @@ func (s Server) Handler() http.Handler {
 				w.WriteHeader(http.StatusNoContent)
 				return
 			}
+		case "/altview/place-batches":
+			w.Header().Set("Access-Control-Allow-Origin", "*")
+			w.Header().Set("Access-Control-Expose-Headers", "Location, Retry-After")
+			if r.Method == http.MethodOptions {
+				w.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS")
+				w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Idempotency-Key")
+				w.WriteHeader(http.StatusNoContent)
+				return
+			}
 		default:
 			if strings.HasPrefix(path, "/api/reverse/batches/") {
 				w.Header().Set("Access-Control-Allow-Origin", "*")
 				if r.Method == http.MethodOptions {
 					w.Header().Set("Access-Control-Allow-Methods", "GET, OPTIONS")
 					w.Header().Set("Access-Control-Allow-Headers", "Authorization, Content-Type")
+					w.WriteHeader(http.StatusNoContent)
+					return
+				}
+			} else if strings.HasPrefix(path, "/altview/place-batches/") {
+				w.Header().Set("Access-Control-Allow-Origin", "*")
+				if r.Method == http.MethodOptions {
+					w.Header().Set("Access-Control-Allow-Methods", "GET, OPTIONS")
+					w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
 					w.WriteHeader(http.StatusNoContent)
 					return
 				}
@@ -106,6 +127,9 @@ func (s Server) help(w http.ResponseWriter, r *http.Request) {
 			{"method": "POST", "path": base + "/api/reverse/batches", "description": "提交通用批量反查，需要 Bearer 凭据；最大数量见 batch.max_points_per_job"},
 			{"method": "GET", "path": base + "/api/reverse/batches/{job_id}", "description": "查看调用方自己的批量任务状态，需要 Bearer 凭据"},
 			{"method": "GET", "path": base + "/api/reverse/batches/{job_id}/results", "description": "分页或按游标读取批量结果，需要 Bearer 凭据"},
+			{"method": "POST", "path": base + "/altview/place-batches", "description": "Altview Android 批量反查代理；服务端使用专用 Bearer 凭据"},
+			{"method": "GET", "path": base + "/altview/place-batches/{job_id}", "description": "查询 Altview Android 批量任务状态"},
+			{"method": "GET", "path": base + "/altview/place-batches/{job_id}/results", "description": "读取 Altview Android 批量结果"},
 			{"method": "GET", "path": base + "/health", "description": "检查数据库就绪状态，并返回版本和提交"},
 			{"method": "GET", "path": base + "/help", "description": "读取本站接口指南"},
 		},
@@ -125,6 +149,8 @@ func (s Server) help(w http.ResponseWriter, r *http.Request) {
 		},
 		"batch": map[string]any{
 			"enabled":                         batchEnabled,
+			"altview_adapter_configured":      batchEnabled && s.Config.AltviewBatchToken != "",
+			"altview_adapter_path":            base + "/altview/place-batches",
 			"authentication":                  "Authorization: Bearer <token>；在运维后台的调用方凭据页创建。",
 			"credential_encryption":           "密钥以 SHA-256 摘要鉴权，并由服务器 AES-GCM 主密钥加密保存；管理员可在运维后台按需查看。",
 			"credential_management":           "/ops/nominatim/credentials.html",

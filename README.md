@@ -15,7 +15,7 @@
 
 ## 快速开始
 
-Go v2 使用 Go 1.26 和 MariaDB。从 `backend/` 运行 `go run ./cmd/nominatim-cache`，启动前用 `nc-migrate schema` 建表。连接、上游及批量接口使用进程环境配置，详见 [v2 部署说明](docs/DEPLOYMENT.md#go-v2-本地运行与发布)。旧 SQLite 可用同一个迁移工具导入。
+Go v2 使用 Go 1.26 和 MariaDB。从 `backend/` 运行 `go run ./cmd/nominatim-cache`，启动前用 `nc-migrate schema` 建表。连接、上游及批量接口使用进程环境配置，详见 [v2 部署说明](docs/DEPLOYMENT.md#go-v2-本地运行与发布)。Altview Android 的服务端批量凭据使用 `ALTVIEW_BATCH_BEARER_TOKEN`，只配置在 Raven 环境文件中；不得编入客户端。旧 SQLite 可用同一个迁移工具导入。
 
 Raven 对外路径为 `/nominatim/reverse`、`/nominatim/health` 和 `/nominatim/help`，由 Nginx 直接转发给 Go 服务。客户端接入及字段说明见 [API 文档](docs/API.md#raven-公网入口go-v2)。
 

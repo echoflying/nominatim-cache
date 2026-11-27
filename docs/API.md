@@ -11,6 +11,9 @@
 | `/api/reverse/batches` | POST | Bearer | 提交批量反查（Go v2） |
 | `/api/reverse/batches/{job_id}` | GET | Bearer | 查看批次状态（Go v2） |
 | `/api/reverse/batches/{job_id}/results` | GET | Bearer | 分页读取批次结果（Go v2） |
+| `/altview/place-batches` | POST | 服务端代理凭据 | Altview Android 专用窄代理；客户端不携带 Bearer |
+| `/altview/place-batches/{job_id}` | GET | 服务端代理凭据 | 查询 Altview 批次状态 |
+| `/altview/place-batches/{job_id}/results` | GET | 服务端代理凭据 | 读取 Altview 批次结果 |
 | `/admin/cache/list` | GET | Basic Auth | 缓存列表 |
 | `/admin/cache/:key` | GET | Basic Auth | 缓存详情 |
 | `/admin/cache/:key` | DELETE | Basic Auth | 删除缓存 |
@@ -56,12 +59,17 @@ curl -u admin:admin123 http://localhost:3000/admin/stats
 | `POST /nominatim/api/reverse/batches` | 提交批量反查，需要 `Authorization: Bearer <token>` |
 | `GET /nominatim/api/reverse/batches/{job_id}` | 查询批量任务状态，需要 Bearer 凭据 |
 | `GET /nominatim/api/reverse/batches/{job_id}/results` | 分页或增量读取批量结果，需要 Bearer 凭据 |
+| `POST /nominatim/altview/place-batches` | Altview Android 专用代理；凭据只保存在 Nominatim Cache 服务环境中 |
+| `GET /nominatim/altview/place-batches/{job_id}` | Altview 批次状态代理 |
+| `GET /nominatim/altview/place-batches/{job_id}/results` | Altview 增量结果代理 |
 | `GET /nominatim/health` | 就绪检查。JSON 含 `status`、`version`、`commit`、`database_ready`、`timestamp` 和 `uptime`。数据库不可用返回 503 |
 | `GET /nominatim/help` | JSON 接口指南，包含调用示例、字段说明、状态码与重试约定 |
 
 这些路径通过 `https://x.zaitu.cn` 上的 Nginx 访问 Nominatim Cache。单点和批量接口均支持 CORS；单点、批量提交和批量结果读取分别按来源 IP 限流，429 附 `Retry-After`。所有批量调用方共用同一组 API、队列和限流规则。运维后台创建的 Bearer 凭据映射到调用方 ID；状态和结果只对提交任务的调用方开放。Raven 的管理页面和同源管理接口通过 `/ops/nominatim/` 提供，由 OPS 校验会话及 `nominatim.access`。独立管理监听仍可通过 SSH 隧道使用 Basic Auth。
 
 `GET /nominatim/help` 的 `batch` 字段应给出完整的批量提交、轮询和结果读取步骤；`batch.enabled=false` 表示服务端尚未配置调用凭据，批量 API 暂不可用。
+
+Altview Android 不适合直接携带通用 Bearer 凭据：APK 可被提取，密钥无法保密。服务端通过 `ALTVIEW_BATCH_BEARER_TOKEN` 配置一个调用方 ID 为 `altview-android` 的专用凭据，窄代理将请求转入同一通用批量队列，任务和结果仍由该调用方隔离。环境变量留空时代理返回 404；令牌被撤销或指向其他调用方时返回 503。该代理只接受与通用批量接口一致的坐标、幂等键和异步任务，不接收照片或 EXIF。Nginx 对代理提交及轮询复用批量 API 的按 IP 限流。
 
 ### 批量逆地理编码（Go v2）
 
@@ -79,7 +87,7 @@ curl -u admin:admin123 http://localhost:3000/admin/stats
 
 ### 公网批量反查
 
-所有 App、网站和其他调用方使用同一组批量接口，不按应用另设路径。提交请求需携带 `Authorization: Bearer <token>` 和 `Idempotency-Key`。管理员在 `/ops/nominatim/credentials.html` 创建调用方 ID、说明标签和凭据；列表默认显示密钥提示，管理员可按需查看。数据库同时保存用于鉴权的 SHA-256 摘要和用 Raven 独立加密主密钥加密的密钥密文。每批最多 `BATCH_LIMIT` 个点，状态和结果只对该调用方开放。Raven 对提交和结果查询分别按来源 IP 限流。至少有一个未撤销凭据时批量 API 启用，否则帮助接口显示 `batch.enabled=false`，批量路径返回 404。
+普通调用方使用同一组通用批量接口，不按应用拆分队列；提交需带 `Authorization: Bearer <token>` 和 `Idempotency-Key`。Altview Android 使用上述服务端窄代理，避免把凭据打进 APK，但最终仍以 `altview-android` 调用方进入相同 API、队列和限流规则。管理员在 `/ops/nominatim/credentials.html` 创建调用方 ID、说明标签和凭据；数据库保存 SHA-256 鉴权摘要和加密密文。每批最多 `BATCH_LIMIT` 个点，任务及结果只对对应调用方开放。Raven 对提交和结果查询分别按来源 IP 限流。
 
 调用方 ID 是稳定名称，建议按应用及平台区分，例如 `altview-android`、`travelody-web`。客户端不另传 App ID，服务端根据 Bearer 密钥识别调用方。管理后台可查看密钥并记录查看时间；限制管理账号权限，避免无关人员读取。轮换时先为同一调用方创建新密钥、更新客户端，再撤销旧密钥。当前接口没有终端 ID 字段，不会区分同一应用的具体安装设备。
 

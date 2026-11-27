@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"context"
 	"crypto/sha256"
 	"database/sql"
 	"encoding/hex"
@@ -48,6 +49,30 @@ func (s Server) batchAuth(next func(http.ResponseWriter, *http.Request, string))
 	}
 }
 
+// The Android client cannot safely contain a batch credential. This narrow
+// adapter uses the server-side Altview credential and keeps task ownership in
+// the shared generic batch system.
+func (s Server) altviewBatchAuth(next func(http.ResponseWriter, *http.Request, string)) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Cache-Control", "no-store")
+		if s.Config.AltviewBatchToken == "" {
+			fail(w, http.StatusNotFound, "Altview batch API disabled")
+			return
+		}
+		caller, _, err := s.Store.ResolveBatchCredential(r.Context(), s.Config.AltviewBatchToken)
+		if err != nil {
+			batchError(w, err)
+			return
+		}
+		if caller != "altview-android" {
+			fail(w, http.StatusServiceUnavailable, "Altview batch credential is not configured")
+			return
+		}
+		ctx := context.WithValue(r.Context(), batchPathKey{}, "/altview/place-batches")
+		next(w, r.WithContext(ctx), caller)
+	}
+}
+
 type batchLinks struct {
 	store.Batch
 	StatusURL  string `json:"status_url"`
@@ -57,6 +82,9 @@ type batchLinks struct {
 func links(r *http.Request, batch store.Batch) batchLinks {
 	prefix, _ := r.Context().Value(prefixKey{}).(string)
 	base := "/api/reverse/batches"
+	if proxyBase, ok := r.Context().Value(batchPathKey{}).(string); ok && proxyBase != "" {
+		base = proxyBase
+	}
 	statusURL := prefix + base + "/" + batch.ID
 	return batchLinks{Batch: batch, StatusURL: statusURL, ResultsURL: statusURL + "/results"}
 }
