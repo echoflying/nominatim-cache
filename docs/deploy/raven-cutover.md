@@ -45,6 +45,8 @@ sudo bash install-raven-fresh.sh \
 
 2026-11-27（北京时间）随后发布 `v2.0.0-rc.10`（`1349e2971bf98b52a0e6c209c8e51ea9eec55a4f`）和 `v2.0.0-rc.11`（`4a6ec56c02cb691736dfc59523d0f54bf518d85d`），将 Altview 专用路由替换为所有调用方共用的 `/nominatim/api/reverse/batches`，使用 Bearer 凭据、同一持久化队列和按 IP 限流。Nginx 旧片段备份为 `/etc/nginx/snippets/nominatim.conf.before-rc10-20261127` 与 `/etc/nginx/conf.d/00-nominatim-rate.conf.before-rc10-20261127`，配置校验通过后重载；此次未修改数据库结构。RC.11 健康检查正常，帮助接口列出通用 API 并返回 `batch.enabled=false`。生产 `BATCH_TOKENS` 为空，因此通用批量 API 当前关闭并返回 404；未生成或下发调用方凭据。Altview 专用公网路径已关闭。
 
+2026-11-27（北京时间）发布 `v2.0.0-rc.12`，增加后台调用方凭据创建、列表和撤销，密钥仅创建时返回并只保存 SHA-256 摘要；应用兼容迁移 `007_compat006_batch_credentials.sql`。迁移前备份为 `/mnt/datadisk0/nominatim-cache/backups/nominatim-cache-before-rc12-20261127.sql.gz`。RC.12 随后由 `v2.0.0-rc.13` 替代，补齐概览、缓存和最近请求页的静态资源版本号，使新凭据导航在旧页面缓存下也能更新。未创建调用方密钥；批量 API 继续关闭。
+
 ### 旧站备份方法
 
 以下方法用于从仍在运行的旧版本制作独立快照。若已经拿到含 WAL 的归档，先用临时工作目录合成独立快照，再导入。
